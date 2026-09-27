@@ -1,0 +1,37 @@
+[project]
+name = "alex"
+version = "0.1.0"
+description = "Agentic financial analysis terminal (NVIDIA NIM + free market/macro/filing APIs, risk & correlation, Neo4j + Postgres)"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.40",           # NVIDIA NIM is OpenAI-compatible (integrate.api.nvidia.com/v1)
+    "pydantic-settings>=2.3", # config from .env
+    "yfinance>=0.2.40",       # free prices / fundamentals
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "requests>=2.31",         # FRED, SEC EDGAR, Finnhub REST
+    "psycopg[binary]>=3.1",   # Postgres
+    "neo4j>=5.20",            # graph
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# Laya = local calibrated typed-decision classifier for news sentiment (pulls torch+transformers, ~GBs).
+laya = ["laya>=0.3"]
+
+[project.scripts]
+alex = "alex.cli:main"
+alex-api = "alex.api:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["alex"]

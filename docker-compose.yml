@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fintel
+      POSTGRES_PASSWORD: fintel
+      POSTGRES_DB: fintel
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fintel"]
+      interval: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/fintelpass
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4jdata:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p fintelpass 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  app:
+    build: .
+    env_file: .env
+    environment:                       # override .env DB hosts for in-network names
+      POSTGRES_DSN: postgresql://fintel:fintel@postgres:5432/fintel
+      NEO4J_URI: bolt://neo4j:7687
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      neo4j: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  neo4jdata:
