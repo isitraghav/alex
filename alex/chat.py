@@ -6,7 +6,9 @@
 
 Each turn runs `claude -p` (your Claude Code login) with alex's MCP tool server; the
 conversation continues across turns via the CLI's session id. Tool calls are shown as
-they happen. Commands: /model <id>, /new (fresh conversation), /exit.
+they happen. Answers are rendered as Markdown (bold, lists, tables, code) in the terminal;
+when output is not a terminal it is printed as plain text. Commands: /model <id>, /new
+(fresh conversation), /exit.
 """
 from __future__ import annotations
 
@@ -15,8 +17,33 @@ import json
 import subprocess
 import sys
 
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.text import Text
+
 from . import claude_code
 from .prompts import VARIANTS
+
+CONSOLE = Console(highlight=False)
+
+
+def show_tool(name: str, args: str, console: Console = CONSOLE) -> None:
+    """One tool call, dimmed; printed as plain text so brackets in arguments are not markup."""
+    console.print(Text(f"   · {name}({args})", style="dim"))
+
+
+def show_answer(text: str, console: Console = CONSOLE) -> None:
+    """The assistant's reply rendered as Markdown; errors in red."""
+    console.print()
+    console.print(Text("alex ›", style="bold cyan"))
+    if text.startswith("["):              # our own error / exit messages
+        console.print(Text(text, style="red"))
+    else:
+        console.print(Markdown(text, code_theme="monokai", hyperlinks=False))
+
+
+def note(msg: str, console: Console = CONSOLE) -> None:
+    console.print(Text(msg, style="dim"))
 
 SYSTEM = VARIANTS["grounded"] + (
     " You are talking to a person in an interactive chat; answer in plain language and say which "
@@ -53,7 +80,7 @@ def ask(question: str, model: str, live: bool, session: str | None, effort: str)
                 if b.get("type") == "tool_use":
                     name = b.get("name", "").removeprefix(claude_code.PREFIX)
                     args = ", ".join(f"{k}={v}" for k, v in (b.get("input") or {}).items())
-                    print(f"   · {name}({args})", flush=True)
+                    show_tool(name, args)
         elif e.get("type") == "result":
             answer = e.get("result") or ""
             if e.get("is_error"):
@@ -78,10 +105,12 @@ def main(argv: list[str] | None = None) -> None:
     if not claude_code.available():
         sys.exit("`claude` CLI not found on PATH. Install Claude Code and run `claude` once to log in.")
     model, session, live = a.model, None, not a.frozen
-    print(f"alex chat · {model} · {'live' if live else 'frozen'} data · /model <id>, /new, /exit")
+    CONSOLE.print(Text("alex chat", style="bold cyan"),
+                  Text(f"· {model} · {'live' if live else 'frozen'} data · /model <id>, /new, /exit", style="dim"))
     while True:
         try:
-            q = input("\nyou › ").strip()
+            CONSOLE.print()
+            q = CONSOLE.input("[bold green]you ›[/bold green] ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -91,15 +120,15 @@ def main(argv: list[str] | None = None) -> None:
             break
         if q == "/new":
             session = None
-            print("(new conversation)")
+            note("(new conversation)")
             continue
         if q.startswith("/model"):
             model = q.split(maxsplit=1)[1].strip() if len(q.split()) > 1 else model
             session = None
-            print(f"(model: {model}, new conversation)")
+            note(f"(model: {model}, new conversation)")
             continue
         answer, session = ask(q, model, live, session, a.effort)
-        print(f"\nalex › {answer}")
+        show_answer(answer)
 
 
 if __name__ == "__main__":

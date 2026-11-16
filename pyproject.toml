@@ -11,6 +11,7 @@ dependencies = [
     "requests>=2.31",         # FRED, SEC EDGAR, Finnhub REST
     "anthropic>=2.9.0",       # Claude API (Messages + tool use)
     "openai>=3.51.0",         # OpenRouter (OpenAI-compatible) route
+    "rich>=13.7",
 ]
 
 [project.optional-dependencies]

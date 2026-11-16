@@ -129,7 +129,7 @@ Reach the models in **one** of three ways:
 ```bash
 cp .env.example .env
 uv sync --all-extras
-uv run pytest                                    # 70 tests; the live-Neo4j ones runs when ALEX_NEO4J_TEST_URI is set (CI)
+uv run pytest                                    # 74 tests; the live-Neo4j ones runs when ALEX_NEO4J_TEST_URI is set (CI)
 uv run alex --variant minimal,default,grounded   # the full ablation (3 tiers x 3 prompts)
 uv run alex --provider claude-code --models claude-haiku-5-5   # through the Claude Code CLI
 uv run alex --variant default --repeats 3        # reliability (pass^k, H6)
