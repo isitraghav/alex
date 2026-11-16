@@ -1,27 +1,41 @@
 [project]
 name = "alex"
-version = "0.1.0"
-description = "LLM tool-use benchmark: a constant prompt suite over financial-data tools, scored by rules (NVIDIA NIM)"
+version = "0.3.0"
+description = "Ablation benchmark of Claude models on financial tool use and knowledge-graph reasoning: rule-scored, expert-system diagnosed, fuzzy-rated"
 requires-python = ">=3.11"
 dependencies = [
-    "openai>=1.40",           # NVIDIA NIM is OpenAI-compatible (integrate.api.nvidia.com/v1)
     "pydantic-settings>=2.3", # config from .env
     "yfinance>=0.2.40",       # free prices / fundamentals
     "pandas>=2.2",
     "numpy>=1.26",
     "requests>=2.31",         # FRED, SEC EDGAR, Finnhub REST
+    "anthropic>=2.9.0",       # Claude API (Messages + tool use)
+    "openai>=3.51.0",         # OpenRouter (OpenAI-compatible) route
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+graph = ["neo4j>=5.20"]           # Neo4j knowledge-graph backend
+report = ["python-docx>=1.1", "matplotlib>=3.8"]   # report/build
 
 [project.scripts]
 alex = "alex.bench:main"
 alex-bench = "alex.bench:main"
+alex-kg = "alex.kg:main"
+alex-mcp = "alex.mcp_server:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["report/build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+ignore = ["E731", "B023", "B905", "E741", "E702"]
 
 [build-system]
 requires = ["hatchling"]

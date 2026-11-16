@@ -1,4 +1,4 @@
-"""The tool set the benched model can call: OpenAI-style function schemas plus
+"""The tool set the benched model can call: Claude tool definitions plus
 two interchangeable backends:
 
   * frozen (default) — deterministic fixtures, identical for every model/run
@@ -11,9 +11,18 @@ from typing import Any, Callable
 Dispatch = dict[str, Callable[..., Any]]
 
 
-def live_dispatch() -> Dispatch:
-    from . import analysis, sources  # lazy: frozen mode needs no network libs
+def _kg_tools(g: Any) -> Dispatch:
     return {
+        "kg_neighbors": lambda entity, relation=None, direction="both", limit=25:
+            g.neighbors(entity, relation, direction, limit),
+        "kg_path": lambda entities, max_hops=4, relations=None: g.path(entities, max_hops, relations),
+    }
+
+
+def live_dispatch() -> Dispatch:
+    from . import analysis, kg, sources  # lazy: frozen mode needs no network libs
+    return {
+        **_kg_tools(kg.graph(live=True)),
         "quote": lambda tickers: sources.quote(tickers),
         "fundamentals": lambda ticker: sources.fundamentals(ticker),
         "risk_metrics": lambda tickers, period="1y": analysis.risk_metrics(tickers, period=period),
@@ -25,8 +34,8 @@ def live_dispatch() -> Dispatch:
 
 
 def frozen_dispatch() -> Dispatch:
-    from . import fixtures
-    return dict(fixtures.DISPATCH)
+    from . import fixtures, kg
+    return {**fixtures.DISPATCH, **_kg_tools(kg.memory_graph())}
 
 
 _STR = {"type": "string"}
@@ -35,13 +44,17 @@ _TICKERS = {"type": "array", "items": {"type": "string"},
 
 
 def _tool(name: str, desc: str, props: dict, required: list[str]) -> dict:
+    """Claude Messages API tool definition (name / description / input_schema)."""
     return {
-        "type": "function",
-        "function": {
-            "name": name, "description": desc,
-            "parameters": {"type": "object", "properties": props, "required": required},
-        },
+        "name": name, "description": desc,
+        "input_schema": {"type": "object", "properties": props, "required": required},
     }
+
+
+def openai_format(schemas: list[dict]) -> list[dict]:
+    """Same tools in OpenAI function-calling format (for OpenRouter)."""
+    return [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                              "parameters": t["input_schema"]}} for t in schemas]
 
 
 SCHEMAS = [
@@ -64,4 +77,25 @@ SCHEMAS = [
           {"ticker": _STR, "form": _STR, "count": {"type": "integer"}}, ["ticker"]),
     _tool("company_news", "Recent company news headlines.",
           {"ticker": _STR, "days": {"type": "integer"}}, ["ticker"]),
+    _tool("kg_neighbors",
+          "Financial knowledge graph: entities directly related to one entity (a ticker, sector, "
+          "industry, country or FRED series id). Relations: IN_INDUSTRY, PART_OF, DOMICILED_IN, "
+          "SUPPLIES (supplier -> customer, with product), COMPETES_WITH, CORRELATED (1y return "
+          "correlation), SENSITIVE_TO (company -> macro series, with direction and channel).",
+          {"entity": {**_STR, "description": "e.g. NVDA, DGS10, Semiconductors"},
+           "relation": {**_STR, "description": "optional relation filter, e.g. SUPPLIES"},
+           "direction": {**_STR, "enum": ["in", "out", "both"],
+                         "description": "out = entity is the source (e.g. what it supplies)"},
+           "limit": {"type": "integer"}}, ["entity"]),
+    _tool("kg_path",
+          "Financial knowledge graph: shortest chain of relations connecting entities (multi-hop), "
+          "e.g. how two companies are linked through suppliers, competitors or industries.",
+          {"entities": {"type": "array", "items": {"type": "string"},
+                        "description": "two or more entities; paths go from the first to each other one"},
+           "max_hops": {"type": "integer", "description": "1-6, default 4"},
+           "relations": {"type": "array", "items": {"type": "string"},
+                         "description": "optional: only traverse these relation types, e.g. ['SUPPLIES']"}},
+          ["entities"]),
 ]
+
+OPENAI_SCHEMAS = openai_format(SCHEMAS)

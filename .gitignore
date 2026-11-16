@@ -2,6 +2,10 @@
 .venv/
 __pycache__/
 *.pyc
-uv.lock
 .pytest_cache/
+.ruff_cache/
 results/
+# reference material from other projects / the course (kept locally, not published)
+report/reference/
+# Word lock files
+~$*

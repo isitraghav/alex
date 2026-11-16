@@ -7,6 +7,8 @@ what to do; a single failing source never kills the loop.
 """
 from __future__ import annotations
 
+import re
+import warnings
 from typing import Any
 
 import pandas as pd
@@ -15,11 +17,26 @@ import yfinance as yf
 
 from .config import settings
 
+# yfinance triggers pandas deprecation chatter on every call; it is noise for this tool.
+warnings.filterwarnings("ignore", module=r"yfinance(\..*)?")
+warnings.filterwarnings("ignore", message=r".*inplace.*")
+
 _TIMEOUT = 20
 
 
+def _redact(text: str) -> str:
+    """Strip secrets from error text: requests errors embed the full URL, query string included,
+    and FRED/Finnhub take their key as a query parameter. Tool errors are shown to the model
+    and saved in results/*.json, so a key must never appear in them."""
+    text = re.sub(r"(?i)((?:api_key|apikey|token|key)=)[^&\s'\"]+", r"\1<redacted>", text)
+    for secret in (settings.fred_api_key, settings.finnhub_api_key):
+        if secret:
+            text = text.replace(secret, "<redacted>")
+    return text
+
+
 def _err(e: Exception) -> dict[str, str]:
-    return {"error": f"{type(e).__name__}: {e}"}
+    return {"error": _redact(f"{type(e).__name__}: {e}")}
 
 
 # ---------------------------------------------------------------- prices ----
@@ -54,8 +71,12 @@ def quote(tickers: list[str]) -> dict[str, Any]:
                         return v
                 return None
 
+            last = g("last_price", "lastPrice")
+            if last is None:  # unknown / delisted symbol: say so, like the frozen backend does
+                out[t] = {"error": f"no data for {t}"}
+                continue
             out[t] = {
-                "last": g("last_price", "lastPrice"),
+                "last": last,
                 "prev_close": g("previous_close", "previousClose"),
                 "day_high": g("day_high", "dayHigh"),
                 "day_low": g("day_low", "dayLow"),
@@ -74,7 +95,7 @@ def fundamentals(ticker: str) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         return _err(e)
     keep = [
-        "sector", "industry", "longName", "trailingPE", "forwardPE", "beta",
+        "sector", "industry", "longName", "country", "trailingPE", "forwardPE", "beta",
         "marketCap", "dividendYield", "profitMargins", "returnOnEquity",
         "debtToEquity", "revenueGrowth", "recommendationKey", "fiftyTwoWeekHigh",
         "fiftyTwoWeekLow",

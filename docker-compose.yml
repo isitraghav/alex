@@ -2,5 +2,26 @@ services:
   bench:
     build: .
     env_file: .env
-    volumes: ["./results:/app/results"]   # reports land on the host
-    # extra flags: docker compose run --rm bench --models a,b --repeats 3
+    environment:
+      NEO4J_URI: bolt://neo4j:7687          # in-network name (only used with KG_BACKEND=neo4j)
+    volumes: ["./results:/app/results"]     # reports land on the host
+    # extra flags: docker compose run --rm bench --variant grounded --repeats 3
+
+  # Optional knowledge-graph database for live mode:
+  #   docker compose --profile graph up -d neo4j
+  #   docker compose run --rm --entrypoint alex-kg bench load
+  neo4j:
+    image: neo4j:5.26
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4jdata:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_PASSWORD}\" 'RETURN 1' || exit 1"]
+      interval: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  neo4jdata:

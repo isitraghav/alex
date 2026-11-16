@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/ci-test-password
+        ports: ["7687:7687"]
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p ci-test-password 'RETURN 1'"
+          --health-interval 5s --health-retries 30 --health-start-period 20s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+      - run: uv sync --frozen --extra dev --extra graph
+      - run: uv run --frozen ruff check alex tests
+      - run: uv run --frozen pytest
+        env:
+          ALEX_NEO4J_TEST_URI: bolt://localhost:7687
+          ALEX_NEO4J_TEST_PASSWORD: ci-test-password

@@ -40,5 +40,7 @@ def test_correlation_ranking(monkeypatch):
 
 
 if __name__ == "__main__":
-    import sys, pytest
+    import sys
+
+    import pytest
     sys.exit(pytest.main([__file__, "-q"]))

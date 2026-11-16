@@ -62,6 +62,7 @@ def score_case(case: Case, calls: list[dict], answer: str) -> dict[str, Any]:
     total_w = sum(w for _, w in live.values())
     score = sum(s * w for s, w in live.values()) / total_w
     return {
-        "tools": parts["tools"][0], "args": parts["args"][0], "answer": parts["answer"][0],
+        "tools": parts["tools"][0], "args": parts["args"][0], "answer_score": parts["answer"][0],
+        "forbidden_hit": bool(case.forbid and re.search(case.forbid, answer)),
         "score": round(score, 4), "passed": all(s == 1.0 for s, _ in live.values()),
     }
