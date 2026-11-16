@@ -30,7 +30,7 @@ model tier (3) × system prompt (3) × effort  [× harness: Claude API | OpenRou
 - **Recommendation.** Use Haiku with the grounded prompt for retrieval and analysis, and Sonnet where
   the assistant rates or labels entities. Opus showed no gain on this suite.
 
-Full write-up: `report/alex_LLM_Tool_Use_Benchmark_Report.pdf`. Merged result data:
+Full write-up: `report/alex_Final_Project_Report.pdf`. Merged result data:
 `report/build/data/bench.json`.
 
 ## What is measured
@@ -123,14 +123,16 @@ docker compose run --rm --entrypoint alex-kg bench stats
 
 ## Report
 
-`report/alex_LLM_Tool_Use_Benchmark_Report.docx` / `.pdf` — the project report. Without results it
-is the **study protocol** (methods, knowledge graph, hypotheses, ethics). After a benchmark run:
+`report/alex_Final_Project_Report.docx` / `.pdf` is the project report, built inside the course
+template (Cambria, US Letter, the template's cover, declaration and section order). Every table and
+verdict is generated from the result data:
 
 ```bash
-uv run python report/build/make_report.py results/bench-<timestamp>.json   # charts + docx + pdf
+uv run python report/build/make_report.py results/final/bench-*.json   # merge, figures, docx, pdf
 ```
 
-Results sections, hypothesis verdicts and conclusions are then generated from the data.
+The template file is kept locally in `report/reference/` (git-ignored); the PDF step uses Microsoft
+Word or LibreOffice.
 
 ## Layout
 
@@ -139,8 +141,8 @@ alex/           bench.py (runner, CLI)  llm.py / claude_code.py / mcp_server.py 
                 prompts.py (suite)  tools.py / fixtures.py / sources.py / analysis.py (tools)
                 kg.py (knowledge graph)  scoring.py  diagnose.py  fuzzy.py  stats.py
 tests/          offline tests; test_suite.py proves every case solvable
-report/         report + build scripts (make_report.py, sections.py, discussion.py, charts.py,
-                literature_survey.md); data/pilot-nim.json = the open-model pilot
+report/         final report + build scripts (make_report.py, final_report.py, figures.py,
+                literature_survey.md); data/bench.json = merged results, data/pilot-nim.json = pilot
 ```
 
 ## Notes

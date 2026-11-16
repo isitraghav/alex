@@ -1,13 +1,12 @@
-"""One command from a benchmark result to the finished report.
+"""One command from benchmark results to the finished report (course template).
 
-    python report/build/make_report.py results/bench-XXXX.json   # results edition
-    python report/build/make_report.py                           # protocol edition (no results yet)
-    python report/build/make_report.py results/a.json results/b.json   # merge single-model runs first
+    python report/build/make_report.py results/final/bench-*.json   # merge runs, then build
+    python report/build/make_report.py                              # rebuild from data/bench.json
 
-Steps: (merge) -> copy to report/build/data/bench.json -> charts -> .docx -> .pdf.
-The PDF step needs Microsoft Word (Windows, via COM) or LibreOffice (`soffice`) and is
-skipped with a message if neither is available. Needs the `report` extra:
-`uv sync --extra report` (python-docx, matplotlib).
+Steps: merge result files -> report/build/data/bench.json -> figures -> .docx (in the course
+template, report/reference/Final_Project_Report_Template.docx) -> .pdf with the table of
+contents updated. The PDF step needs Microsoft Word (Windows, via COM) or LibreOffice.
+Needs the `report` extra: `uv sync --extra report`.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 DATA = HERE / "data" / "bench.json"
-DOCX = ROOT / "report" / "alex_LLM_Tool_Use_Benchmark_Report.docx"
+DOCX = ROOT / "report" / "alex_Final_Project_Report.docx"
 
 
 def merge(paths: list[Path]) -> dict:
@@ -28,20 +27,20 @@ def merge(paths: list[Path]) -> dict:
     hashes = {r["suite_hash"] for r in reps}
     if len(hashes) > 1:
         sys.exit(f"cannot merge reports from different suites: {hashes}")
+    provs = {r.get("provider") for r in reps}
+    if len(provs) > 1:
+        sys.exit(f"cannot merge reports from different providers: {provs} (use alex --compare)")
     out = dict(reps[0])
-    out["summary"] = {k: v for r in reps for k, v in r["summary"].items()}
     out["runs"] = [x for r in reps for x in r["runs"]]
     out["variants"] = sorted({v for r in reps for v in r.get("variants", [])})
     out["repeats"] = max(int(r.get("repeats") or 1) for r in reps)
     out["started"] = min(r["started"] for r in reps)
-    provs = {r.get("provider") for r in reps}
-    if len(provs) > 1:
-        sys.exit(f"cannot merge reports from different providers: {provs} (use alex --compare)")
     out.pop("analysis", None)   # recomputed by the report builder
     # summaries are recomputed from the raw runs so every configuration uses the same definitions
     sys.path.insert(0, str(ROOT))
     from alex.bench import summarize
-    out["summary"] = {k: summarize([x for x in out["runs"] if x.get("key") == k]) for k in out["summary"]}
+    keys = sorted({k for r in reps for k in r["summary"]})
+    out["summary"] = {k: summarize([x for x in out["runs"] if x.get("key") == k]) for k in keys}
     return out
 
 
@@ -51,7 +50,8 @@ def to_pdf(docx: Path) -> Path | None:
         ps = (
             "$w = New-Object -ComObject Word.Application; $w.Visible = $false; "
             f"$d = $w.Documents.Open('{docx}'); $d.Fields.Update() | Out-Null; "
-            "foreach ($t in $d.TablesOfContents) { $t.Update() }; "
+            "foreach ($t in $d.TablesOfContents) { $t.Update(); $t.Range.Font.Name = 'Cambria'; "
+            "$t.Range.Font.Size = 12 }; "
             f"$d.SaveAs2('{pdf}', 17); $d.Save(); $d.Close(); $w.Quit()"
         )
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
@@ -71,15 +71,13 @@ def to_pdf(docx: Path) -> Path | None:
 def main() -> None:
     args = [Path(a) for a in sys.argv[1:]]
     if args:
-        rep = merge(args) if len(args) > 1 else json.loads(args[0].read_text(encoding="utf-8"))
         DATA.parent.mkdir(exist_ok=True)
-        DATA.write_text(json.dumps(rep, indent=1), encoding="utf-8")
-        src = [str(DATA)]
-    else:
-        src = []
+        DATA.write_text(json.dumps(merge(args), indent=1), encoding="utf-8")
+    if not DATA.exists():
+        sys.exit(f"no results: pass result files or create {DATA}")
     py = sys.executable
-    subprocess.run([py, str(HERE / "charts.py"), *src], check=True)
-    subprocess.run([py, str(HERE / "build_report.py"), *src], check=True)
+    subprocess.run([py, str(HERE / "figures.py"), str(DATA)], check=True)
+    subprocess.run([py, str(HERE / "final_report.py"), str(DATA)], check=True)
     pdf = to_pdf(DOCX)
     print("report:", DOCX, *(["and", pdf] if pdf else []))
 
