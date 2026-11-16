@@ -36,7 +36,7 @@ TEMPLATE = ROOT / "report" / "reference" / "Final_Project_Report_Template.docx"
 OUT = ROOT / "report" / "alex_Final_Project_Report.docx"
 FIG = HERE / "fig"
 FONT = "Cambria"
-TITLE = "Benchmarking and Ablation of Claude Models for Tool-Using Financial Analysis"
+TITLE = "Benchmarking and Ablation of LLMs for Tool-Using Financial Analysis"
 COURSE = "Artificial Intelligence"
 STUDENTS = [("Raghav Yadav", "240598"), ("Rayna Manchanda", "240601"), ("Darshita Yadav", "240981")]
 
@@ -366,39 +366,48 @@ H1("1. Introduction")
 P("Large language models (LLMs) are now used as assistants that do not only write text but also act: they call "
   "tools such as a price feed, a database or a calculator, read the result and answer from it. In finance this "
   "matters directly, because an assistant that picks the wrong tool, passes the wrong ticker or invents a number "
-  "can mislead a real decision. Anthropic's Claude family is offered in three tiers — Haiku (small and cheap), "
-  "Sonnet (balanced) and Opus (largest) — whose prices differ by a factor of about forty, and every team building "
-  "such an assistant has to choose a tier and write a system prompt.")
-P("This project, alex, is a benchmark and ablation study that answers that choice with evidence. It gives each "
-  f"Claude 5.5 tier the same {len(CASES)} financial questions, the same {len(SCHEMAS)} tools (market data, macro data, "
-  "filings, news and a financial knowledge graph) and the same frozen data, under three different system prompts. "
-  "Every run is scored by explicit rules, every failure is explained by a rule-based expert system, and six "
-  "hypotheses fixed before the experiment are answered with statistical tests.")
+  "can mislead a real decision. Model providers sell their LLMs in size tiers whose prices differ by more than an "
+  "order of magnitude, and every team building such an assistant must decide how large a model it needs and how "
+  "to instruct it.")
+P("This project contributes two things. The first is alex, a model-agnostic toolkit and evaluation harness: it "
+  "exposes financial tools (market data, macro data, filings, news, risk analytics and an editable knowledge "
+  "graph) to any tool-calling LLM through the Model Context Protocol, and measures how well a model uses them. "
+  "The second is a controlled benchmark and ablation study built on it: the same "
+  f"{len(CASES)} financial questions, the same {len(SCHEMAS)} tools and the same frozen data are given to models of "
+  "different size under three different system prompts. Every run is scored by explicit rules, every failure is "
+  "explained by a rule-based expert system, and six hypotheses fixed before the experiment are answered with "
+  "statistical tests.")
+P("As a case study the ablation uses one model family, Anthropic's Claude 5.5, in its three tiers — Haiku (small), "
+  "Sonnet (medium) and Opus (large). Staying within one family is a deliberate control: the tiers share a "
+  "vendor, an interface and a training lineage, so differences between them can be attributed to model size "
+  "rather than to everything else that changes between vendors. The method and the harness apply unchanged to "
+  "other model families.", "Case study. ")
 P("The objectives are:")
 B(f"build a reproducible benchmark of {len(CASES)} financial tool-use questions over {len(SCHEMAS)} tools, including a "
   "knowledge graph stored in Neo4j;")
-B("run an ablation over model tier (Haiku, Sonnet, Opus 5.5) and system prompt (minimal, default, grounded), "
-  "measuring accuracy, cost, latency and behaviour;")
+B("run an ablation over model size (case study: the Claude 5.5 tiers Haiku, Sonnet and Opus) and system prompt "
+  "(minimal, default, grounded), measuring accuracy, cost, latency and behaviour;")
 B("score answers without an LLM judge and explain every failure with an expert system;")
 B("test safety and ethics directly: hallucination, prompt injection and counterfactual fairness;")
-B("give a practical, evidence-based recommendation for which tier and prompt to use.")
+B("give a practical, evidence-based recommendation for how large a model and which prompt a financial "
+  "assistant needs.")
 P("The work follows the course theme AI for Human Insight and Capability Enhancement in the finance domain: the "
   "benchmark does not replace an analyst, it tells the analyst which AI assistant can be trusted, for which task "
   "and at what cost.")
 
 # ========================================================== 2 Problem Statement ====
 H1("2. Problem Statement")
-P("Given the same financial questions, the same tools and the same data, how do Claude Haiku 5.5, Sonnet 5.5 and "
-  "Opus 5.5 differ in tool selection, argument correctness, faithful reporting, resistance to hallucination and "
-  "prompt injection, fairness, speed and cost — and how much does the system prompt change the outcome?",
-  "Problem. ")
+P("Given the same financial questions, the same tools and the same data, how do LLMs of different size differ "
+  "in tool selection, argument correctness, faithful reporting, resistance to hallucination and prompt injection, "
+  "fairness, speed and cost — and how much does the system prompt change the outcome? The study answers this for "
+  "one model family (Claude 5.5: Haiku, Sonnet, Opus) as a case study.", "Problem. ")
 P("The question is concrete and repeated in every company that adopts an LLM. Public leaderboards rarely answer it "
   "because they compare different vendors at once, grade answers with another LLM and ignore cost. Wrong "
   "financial figures, obeying instructions hidden in a news feed, or treating identical companies differently "
   "depending on their country are real harms.", "Relevance. ")
 P("The study is feasible on a student budget: the questions are short, the data is frozen so no paid data feed is "
   f"needed, and the complete ablation of {len(RUNS)} runs cost about US${TOTAL_COST:.2f} at API list prices (it was "
-  "run on a Claude subscription).", "Feasibility. ")
+  "run through a subscription-based command-line client).", "Feasibility. ")
 T("Research questions", ["#", "Research question", "Answered in"],
   [["RQ1", "Does accuracy rise with model tier?", "7.2, 7.4"],
    ["RQ2", "Does the system prompt change accuracy or behaviour?", "7.3, 7.5"],
@@ -486,17 +495,18 @@ P("No single feature is new on its own; what the surveyed work does not combine 
 H1("5. Methodology")
 H2("5.1 System architecture")
 P("Figure 1 shows the harness. A run takes one case, one model and one prompt. The runner sends the question to "
-  "Claude through a provider (the Claude Code command-line tool on a subscription, the Claude API, or "
-  "OpenRouter). Claude answers or asks for a tool; tool calls go to alex's own tool server (Model Context "
-  "Protocol), which reads the frozen data or the knowledge graph and returns the result. When Claude gives its "
-  "final answer, the run record is scored by rules, explained by the expert system if it failed, and collected "
-  "for the statistics and this report.")
+  "the LLM under test through a provider adapter: a native vendor API, an OpenAI-compatible gateway (OpenRouter, "
+  "which serves tool-calling models from many vendors) or a command-line agent client. The model answers or asks "
+  "for a tool; tool calls go to alex's own tool server (Model Context Protocol), which reads the frozen data or the "
+  "knowledge graph and returns the result. When the model gives its final answer, the run record is scored by "
+  "rules, explained by the expert system if it failed, and collected for the statistics and this report. Nothing "
+  "in the scoring or analysis depends on which model produced the run.")
 FIGURE("pipeline.png", "Architecture of the alex benchmark harness (AI components in orange)", 16.6)
 H2("5.2 Ablation study design")
 P("An ablation changes one factor at a time and holds everything else fixed, so any difference can be attributed "
   "to that factor. This study crosses two factors in a full 3 × 3 design.")
 T("Factors of the ablation", ["Factor", "Levels", "Runs per level"],
-  [["Model tier", "Haiku 5.5, Sonnet 5.5, Opus 5.5", f"{len(CASES)} × 5 per prompt set"],
+  [["Model size (case study)", "Claude 5.5: Haiku, Sonnet, Opus", f"{len(CASES)} × 5 per prompt set"],
    ["System prompt", "minimal, default, grounded", f"{len(CASES)} per model (default: × 3)"]],
   widths=[3.4, 8.0, 5.4])
 T("System prompts compared", ["Prompt", "What it tells the model"],
@@ -509,7 +519,7 @@ T("What is held constant", ["Control", "How it is enforced"],
   [["Data", "frozen tool data and in-memory knowledge graph"],
    ["Scoring", "fixed rules, no LLM judge"],
    ["Model per score", "no fallback model; the served model id is checked"],
-   ["Reasoning effort", "medium for every model (Claude 5.5 has no temperature setting)"],
+   ["Reasoning effort", "medium for every model (the case-study models take no temperature setting)"],
    ["Suite", f"cases and prompts hashed ({SUITE_HASH})"]], widths=[4.4, 12.4])
 H2("5.3 State space search")
 P("Each run is a search for a correct answer through tool calls.")
@@ -551,7 +561,7 @@ P("The graph is implemented twice with identical answers: in memory for the benc
   "a frame and the scoring and diagnosis logic are production rules.", "Implementation. ")
 H2("5.5 Intelligent system design: AI and non-AI components")
 T("Components and their role", ["Component", "Role", "AI or non-AI"],
-  [["Claude Haiku / Sonnet / Opus 5.5", "choose tools and arguments, write the answer", "AI (transformer LLM)"],
+  [["LLM under test (case study: Claude 5.5)", "choose tools and arguments, write the answer", "AI (transformer LLM)"],
    ["Expert system", "explains why a run failed (forward chaining)", "AI (symbolic)"],
    ["Knowledge graph + path search", "relations and multi-hop paths", "AI (knowledge representation)"],
    ["Rule scorer", "checks tools, arguments, facts, forbidden text", "Rule-based"],
@@ -632,8 +642,8 @@ B("API keys stay in a private file and are removed from any error message.", "Pr
 H1("6. Technology Stack")
 T("Technology stack", ["Layer", "Technology", "Purpose"],
   [["Language", "Python 3.11+", "all components"],
-   ["Models", "Claude Haiku / Sonnet / Opus 5.5", "systems under test"],
-   ["Model access", "Claude Code CLI, Anthropic SDK, OpenAI SDK (OpenRouter)", "three routes to the models"],
+   ["Models", "any tool-calling LLM; case study Claude 5.5 Haiku / Sonnet / Opus", "systems under test"],
+   ["Model access", "OpenAI-compatible API (OpenRouter), Anthropic SDK, Claude Code CLI", "provider adapters"],
    ["Tool protocol", "Model Context Protocol (own server)", "serve tools to the CLI"],
    ["Knowledge graph", "Neo4j 5 (Cypher), in-memory graph", "relations and paths"],
    ["Data (live mode)", "yfinance, FRED, SEC EDGAR, Finnhub", "real market data"],
@@ -656,7 +666,7 @@ T("Experimental setup", ["Item", "Value"],
    ["Cases", f"{len(CASES)} (suite {SUITE_HASH})"],
    ["Repeats", "default prompt × 3, other prompts × 1"],
    ["Total runs", str(len(RUNS))],
-   ["Served through", "Claude Code CLI on a Claude subscription"],
+   ["Served through", "command-line client (Claude Code) on a subscription"],
    ["Reasoning effort", REP.get("effort", "medium")],
    ["Cost at API list prices", f"US${TOTAL_COST:.2f}"]], widths=[5.0, 11.8])
 H2("7.2 Ablation results: accuracy, cost and speed")
@@ -794,13 +804,17 @@ B(f"{NAME[O_]} cost {x_cost(O_, H_):.0f}× and {NAME[S_]} {x_cost(S_, H_):.0f}×
 B("only Haiku rated two identical companies differently, and only Haiku and Sonnet warned users about manipulated "
   "data (RQ4, H5 not supported);", "but behaviour differs — ")
 B("the only failures were scorer artefacts, found by the expert system and a human audit.", "and evaluation needs care — ")
-P(f"Recommendation: use {NAME[H_]} with the grounded prompt for retrieval and analysis questions, {NAME[S_]} with the "
-  f"grounded prompt where the assistant rates or labels companies, and keep {NAME[O_]} for tasks harder than these.",
-  "")
-P("Limitations: 19 cases cannot separate the tiers on accuracy; there is one fairness pair; one model family at one "
-  "effort level; and the data is synthetic. Future work: harder multi-hop and conflicting-data cases, many "
-  "fairness pairs, an effort-level sweep, live data through Neo4j, and the API-versus-CLI comparison that the "
-  "tool already supports (alex --compare).")
+P("For practitioners, the general lesson is that model size should be matched to the task rather than maximised: "
+  "for tool-grounded retrieval and analysis the smallest tier of a family can be as accurate as the largest at a "
+  "small fraction of the cost, while tasks that require consistent judgement (rating or labelling entities) may "
+  "justify a mid-sized model. In the case study this means "
+  f"{NAME[H_]} for retrieval and analysis, {NAME[S_]} where the assistant rates or labels companies, and "
+  f"{NAME[O_]} only for tasks harder than these — each with the grounded prompt. Whether the same pattern holds "
+  "in other model families is a question the harness can answer directly.", "Recommendation. ")
+P("Limitations: 19 cases cannot separate the tiers on accuracy; there is one fairness pair; the case study covers "
+  "one model family at one effort level; and the data is synthetic. Future work: other model families through the "
+  "same harness (cross-family comparison), harder multi-hop and conflicting-data cases, many fairness pairs, an "
+  "effort-level sweep, the knowledge-graph write tasks, and live data through Neo4j.")
 
 # ================================================================= References ====
 H1("References")
@@ -834,7 +848,7 @@ CODE("uv sync --all-extras\n"
 H2("B. Repository structure")
 T("Repository structure", ["Path", "Contents"],
   [["alex/bench.py", "runner, command-line interface, summaries"],
-   ["alex/claude_code.py, mcp_server.py", "Claude Code provider and tool server"],
+   ["alex/llm.py, claude_code.py, mcp_server.py", "provider adapters and the MCP tool server"],
    ["alex/prompts.py", "the suite, system prompts, fairness pair"],
    ["alex/tools.py, fixtures.py", "tool definitions and frozen data"],
    ["alex/kg.py", "knowledge graph (memory and Neo4j)"],

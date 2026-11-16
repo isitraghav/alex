@@ -1,4 +1,4 @@
-# alex — Claude tool-use ablation benchmark for financial analysis
+# alex — benchmarking and ablation of LLMs for tool-using financial analysis
 
 Benchmarks **Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5** on a **constant suite of 19 financial
 questions** that require calling 9 tools: market data, macro, filings, news and a **financial

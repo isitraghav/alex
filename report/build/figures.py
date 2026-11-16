@@ -67,8 +67,8 @@ def pipeline():
     # row 1: run
     box(ax, 0.0, 5.0, W, H, "Benchmark suite", f"{len(CASES)} cases × {len(VARIANTS)} prompts\nfrozen, hashed")
     box(ax, 3.1, 5.0, W, H, "Runner", "alex bench · one thread\nper model, retries")
-    box(ax, 6.2, 5.0, W, H, "Provider", "Claude Code CLI ·\nClaude API · OpenRouter")
-    box(ax, 9.3, 5.0, W, H, "Claude 5.5", "Haiku · Sonnet · Opus\nchooses tool or answer", ai=True)
+    box(ax, 6.2, 5.0, W, H, "Provider adapter", "OpenAI-compatible · vendor\nAPI · CLI agent client")
+    box(ax, 9.3, 5.0, W, H, "LLM under test", "case study: Claude 5.5\nchooses tool or answer", ai=True)
     arrow(ax, 2.55, 5.58, 3.1, 5.58); arrow(ax, 5.65, 5.58, 6.2, 5.58); arrow(ax, 8.75, 5.58, 9.3, 5.58)
     # row 2: act (tools)
     box(ax, 9.3, 2.55, W, H, "MCP tool server", f"{len(SCHEMAS)} tools, JSON schemas\nonly alex tools exposed")

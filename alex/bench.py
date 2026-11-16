@@ -408,7 +408,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     if a.list:
         ids = sorted(m.id for m in client(prov).models.list())
-        print("\n".join(i for i in ids if prov != "openrouter" or "claude" in i) or "(none)")
+        print("\n".join(ids) or "(none)")
         return
 
     models = [m.strip() for m in (a.models or default_models(prov)).split(",") if m.strip()]

@@ -1,7 +1,7 @@
 [project]
 name = "alex"
 version = "0.3.0"
-description = "Ablation benchmark of Claude models on financial tool use and knowledge-graph reasoning: rule-scored, expert-system diagnosed, fuzzy-rated"
+description = "Model-agnostic toolkit and ablation benchmark of LLMs for tool-using financial analysis (case study: Claude 5.5 family)"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic-settings>=2.3", # config from .env
