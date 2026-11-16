@@ -380,8 +380,8 @@ P("This project contributes two things. The first is alex, a model-agnostic tool
 P("As a case study the ablation uses one model family, Anthropic's Claude 5.5, in its three tiers — Haiku (small), "
   "Sonnet (medium) and Opus (large). Staying within one family is a deliberate control: the tiers share a "
   "vendor, an interface and a training lineage, so differences between them can be attributed to model size "
-  "rather than to everything else that changes between vendors. The method and the harness apply unchanged to "
-  "other model families.", "Case study. ")
+  "rather than to everything else that changes between vendors [28]. The method and the harness apply unchanged "
+  "to other model families.", "Case study. ")
 P("The objectives are:")
 B(f"build a reproducible benchmark of {len(CASES)} financial tool-use questions over {len(SCHEMAS)} tools, including a "
   "knowledge graph stored in Neo4j;")
@@ -532,11 +532,11 @@ T("State-space formulation", ["Element", "Definition"],
    ["Path cost", "number of turns, then tokens and money"]], widths=[3.4, 13.4])
 P("The number of possible actions is unbounded (free-text arguments), so blind search such as breadth-first or A* "
   "over explicit states is impossible. The LLM acts as a learned heuristic that proposes the most promising next "
-  "action: greedy best-first search without backtracking, limited to eight turns. Because the shortest correct "
+  "action: greedy best-first search without backtracking [25], limited to eight turns. Because the shortest correct "
   "path of every case is known (usually one round of tool calls, two for the supply-chain case), the number of "
   "calls and turns shows how close each model's search is to optimal.", "Search strategy. ")
 H2("5.4 Knowledge representation")
-P("The project uses a semantic network, stored as a property graph: nodes are typed entities (company, "
+P("The project uses a semantic network [25], stored as a property graph: nodes are typed entities (company, "
   "industry, sector, country, macro series) and edges are typed relations with properties. Relations such as "
   "\"TSMC supplies NVIDIA\" or \"JPMorgan is sensitive to the 10-year yield\" are knowledge that price data "
   "cannot express, and a graph lets the model answer multi-hop questions by following links.")
@@ -573,8 +573,8 @@ P("AI is used where judgement is needed: understanding the question, planning to
   "must be exact and repeatable — running, scoring, statistics — is conventional code, so the measurement itself "
   "never depends on an AI's opinion.")
 H2("5.6 Constraint satisfaction problem")
-P("Checking a run is formulated as a constraint satisfaction problem: the variables describe the run, and the run "
-  "passes only if every constraint is satisfied.")
+P("Checking a run is formulated as a constraint satisfaction problem [25]: the variables describe the run, and the "
+  "run passes only if every constraint is satisfied.")
 T("CSP formulation of run checking", ["Variable", "Domain", "Example constraint (case risk_single)"],
   [["Required tool called", "yes / no", "risk_metrics is called"],
    ["Argument values", "tickers, periods, series ids", "tickers contain NVDA; period = 2y"],
@@ -587,11 +587,11 @@ P("The score is the weighted share of satisfied constraints (tools 40%, argument
   "constraints on its own. (The guidelines allow CSP or fuzzy logic; this project uses CSP.)", "Strategy. ")
 H2("5.7 Other AI techniques")
 H3("Transformer language models")
-P("All three models are decoder-only transformers that generate text token by token and have been trained to emit "
+P("All three models are decoder-only transformers [26] that generate text token by token and have been trained to emit "
   "structured tool calls. The tiers share the interface but differ in size, speed and price; each thinks before "
   "answering, with the same reasoning-effort level for all.")
 H3("Rule-based expert system")
-P(f"A forward-chaining expert system with {len(RULES)} IF–THEN rules turns the facts of a failed run into a diagnosis. "
+P(f"A forward-chaining expert system [25] with {len(RULES)} IF–THEN rules turns the facts of a failed run into a diagnosis. "
   "Rules fire until nothing new can be concluded; higher-level rules build on lower ones. The main rules are:")
 T("Main rules of the expert system", ["IF", "THEN diagnosis"],
   [["API error", "not a model error"],
@@ -603,7 +603,8 @@ T("Main rules of the expert system", ["IF", "THEN diagnosis"],
    ["no rule matches", "unclassified (send to a human)"]], widths=[9.0, 7.8])
 H3("Prompt engineering")
 P("The three system prompts (Section 5.2) are the second factor of the ablation: from no guidance at all to explicit "
-  "grounding and safety instructions.")
+  "grounding and safety instructions. Prompt wording alone is known to change LLM accuracy substantially [23], "
+  "which is why the prompt is ablated rather than fixed.")
 H2("5.8 Scoring, hypotheses and statistics")
 T("Scoring of one run", ["Part", "Weight", "Checks"],
   [["Tools", "40%", "required tools called (none for the no-tool case)"],
@@ -617,7 +618,7 @@ T("Pre-registered hypotheses", ["#", "Hypothesis", "Test"],
   [[h, c.split(" (")[0].split(":")[0].rstrip("."), tests[h]] for h, c in HYPOTHESES.items()],
   widths=[1.2, 9.4, 6.2])
 P("Configurations are compared on the same cases, so tests are paired (exact sign-flip and McNemar tests, "
-  "α = 0.05); mean scores get 95% bootstrap confidence intervals. pass^k is the probability that all k repeats of "
+  "α = 0.05); mean scores get 95% bootstrap confidence intervals [27]. pass^k [10] is the probability that all k repeats of "
   "a case pass. A verdict is \"ceiling\" when every configuration already scores 1.0, so a difference cannot appear.")
 H2("5.9 Originality")
 B("a controlled tier × prompt ablation within one model family, so differences are not mixed with vendor effects;")
@@ -633,7 +634,8 @@ B("an invented price can mislead a decision; the invalid-ticker case fails any a
   "Misinformation: ")
 B("one news headline tells the assistant to recommend buying a stock; obeying it fails the case.",
   "Manipulation (prompt injection): ")
-B("rules and fixed data treat every model the same; no AI grades another AI.", "Fair evaluation: ")
+B("rules and fixed data treat every model the same; no AI grades another AI, because LLM judges show position "
+  "and self-preference biases [19].", "Fair evaluation: ")
 B("the grounded prompt forbids buy/sell advice; the system supports a human analyst rather than deciding.",
   "No financial advice: ")
 B("API keys stay in a private file and are removed from any error message.", "Privacy: ")
@@ -824,9 +826,26 @@ extra = ["S. Russell and P. Norvig, Artificial Intelligence: A Modern Approach, 
          "A. Vaswani et al., \"Attention is all you need,\" in Advances in Neural Information Processing Systems 30, 2017.",
          "B. Efron and R. J. Tibshirani, An Introduction to the Bootstrap. Chapman & Hall, 1993.",
          "Anthropic, \"Claude documentation: tool use, models and pricing,\" platform.claude.com/docs, accessed Nov. 2026."]
-allrefs = [(int(n), re.sub(r"\*", "", t).replace(" [Online]. Available:", "").strip()) for n, t in refs]
-allrefs += [(len(allrefs) + i + 1, t) for i, t in enumerate(extra)]
-for n, t in allrefs:
+allrefs = {int(n): re.sub(r"\*", "", t).replace(" [Online]. Available:", "").strip() for n, t in refs}
+allrefs.update({len(allrefs) + i + 1: t for i, t in enumerate(extra)})
+# Only works cited in the text are listed, numbered by first appearance; every in-text citation is
+# rewritten to the new number. Body text = everything before this References heading.
+_ref_head = doc.paragraphs[-1]._p
+_texts, _order = [], []
+for el in body.iterchildren():
+    if el is _ref_head:
+        break
+    for t in el.iter(qn("w:t")):
+        _texts.append(t)
+        for m in re.finditer(r"\[(\d+)\]", t.text or ""):
+            n = int(m.group(1))
+            if n in allrefs and n not in _order:
+                _order.append(n)
+_new = {old: i + 1 for i, old in enumerate(_order)}
+for t in _texts:
+    if t.text and "[" in t.text:
+        t.text = re.sub(r"\[(\d+)\]", lambda m: f"[{_new.get(int(m.group(1)), m.group(1))}]", t.text)
+for n, t in ((_new[o], allrefs[o]) for o in _order):
     p = doc.add_paragraph()
     pf = p.paragraph_format
     pf.left_indent, pf.first_line_indent, pf.space_after, pf.line_spacing = Cm(1.0), Cm(-1.0), Pt(4), 1.15
