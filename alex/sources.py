@@ -43,13 +43,24 @@ def quote(tickers: list[str]) -> dict[str, Any]:
     for t in tickers:
         try:
             fi = yf.Ticker(t).fast_info
+
+            def g(*keys):  # yfinance versions differ: snake_case vs camelCase
+                for k in keys:
+                    try:
+                        v = fi[k]
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if v is not None:
+                        return v
+                return None
+
             out[t] = {
-                "last": fi.get("last_price"),
-                "prev_close": fi.get("previous_close"),
-                "day_high": fi.get("day_high"),
-                "day_low": fi.get("day_low"),
-                "currency": fi.get("currency"),
-                "market_cap": fi.get("market_cap"),
+                "last": g("last_price", "lastPrice"),
+                "prev_close": g("previous_close", "previousClose"),
+                "day_high": g("day_high", "dayHigh"),
+                "day_low": g("day_low", "dayLow"),
+                "currency": g("currency"),
+                "market_cap": g("market_cap", "marketCap"),
             }
         except Exception as e:  # noqa: BLE001 - per-ticker isolation
             out[t] = _err(e)

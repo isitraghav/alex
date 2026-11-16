@@ -1,67 +1,67 @@
-# alex — agentic financial analysis terminal
+# alex — LLM tool-use benchmark
 
-NVIDIA NIM LLM + free data (yfinance, FRED, SEC EDGAR, Finnhub) + risk/correlation
-analytics, persisting to **Postgres** (analysis history) and **Neo4j**
-(ticker/sector/correlation graph). CLI + FastAPI.
+Benches LLMs (NVIDIA NIM, OpenAI-compatible) on a **constant suite of 13 prompts**
+that require calling financial-data tools. Each run is scored by rules — no LLM
+judge — and written to `results/` as JSON + Markdown.
 
-## What it does
+## What is measured
 
-You ask in plain English; the LLM plans and calls local tools for **real** data,
-then answers with citations. Tools:
+Per prompt (`alex/prompts.py`), weighted score:
 
-| tool | source | output |
+| part | weight | checks |
 |---|---|---|
-| `quote` / `fundamentals` | yfinance | price, ratios, sector, beta |
-| `risk_metrics` | yfinance history | vol, ann. return, Sharpe, max drawdown, VaR/CVaR(95%), beta vs SPY |
-| `correlation` | yfinance history | return-corr matrix + most/least correlated pairs |
-| `fred_series` | FRED | macro series (CPI, GDP, INDPRO, DGS10, …) |
-| `sec_filings` | SEC EDGAR | 10-K/10-Q/8-K links |
-| `company_news` | Finnhub | recent headlines |
-| `news_sentiment` | Finnhub + **Laya** | headlines classified bullish/bearish/neutral, net sentiment, market-moving prob (local, calibrated, free) |
+| tools | 0.4 | required tools called; `no_tool` case must call none |
+| args | 0.3 | correct tickers / series id / form / period / days |
+| answer | 0.3 | final answer contains the fixture values; no invented numbers on error cases |
 
-Risk & correlation results are written to Postgres; correlation edges and sectors
-to Neo4j (`(:Ticker)-[:CORRELATED]->(:Ticker)`, `(:Ticker)-[:IN_SECTOR]->(:Sector)`).
+Plus latency (avg/p95), tokens, tool calls, API errors. `pass` = every part perfect.
+With `--repeats N` each model also gets `score_sd` and `consistency` (share of cases whose
+pass/fail verdict never flips across repeats).
 
-## Setup
+**Fuzzy rating** (`alex/fuzzy.py`): accuracy, latency and token use are fuzzified
+(low/medium/high, fast/moderate/slow, lean/moderate/heavy), run through 10 Mamdani rules
+and defuzzified by centroid into a 0–100 *suitability* with a label
+(poor / fair / good / excellent). It answers "which model should I actually use?" when
+the raw score alone hides a slow or token-hungry model.
+Cases: prices, risk, macro, filings, news, multi-tool, no-tool reasoning, bad-ticker robustness.
+
+**Frozen by default:** tools return deterministic fixtures (`alex/fixtures.py`), so every
+model sees identical data and results are reproducible. `--live` uses real yfinance /
+FRED / SEC / Finnhub instead (answers then can't be fact-checked against fixtures).
+Reports carry a `suite_hash`; only compare runs with the same hash. Temperature is 0.
+
+Tools: `quote`, `fundamentals`, `risk_metrics`, `correlation`, `fred_series`,
+`sec_filings`, `company_news`.
+
+## Run
 
 ```bash
-cp .env.example .env      # fill NVIDIA_API_KEY (required); FRED/FINNHUB optional
+cp .env.example .env            # set NVIDIA_API_KEY (FRED/FINNHUB only for --live)
 uv sync --extra dev
-docker compose up -d postgres neo4j     # start the databases
-uv run pytest             # offline math checks
-uv run alex               # CLI REPL   (needs NVIDIA_API_KEY)
-uv run alex-api           # REST API on :8000
-
-uv sync --extra laya      # optional: local Laya classifier for news_sentiment (~3GB torch)
+uv run pytest                   # offline checks of scoring + runner
+uv run alex                     # bench BENCH_MODELS from .env
+uv run alex --models nvidia/nemotron-3.5-lightning-30b-a3b,nvidia/nemotron-3-ultra-550b-a55b
+uv run alex --cases quote_single,bad_ticker --repeats 3
+uv run alex --list              # models the endpoint serves
+uv run alex --show-cases        # print the prompt suite
+uv run alex --leaderboard       # rank models across all saved reports of this suite
+uv run alex --delay 2           # pause between cases to stay under rate limits
 ```
 
-Laya note: `news_sentiment` uses the base Laya checkpoint zero-shot — treat scores
-as directional, not ground truth. Fine-tune on labelled finance headlines (Laya
-docs) for real accuracy. First call downloads ~800MB.
-
-Full stack in Docker (app + both DBs):
+Docker:
 
 ```bash
-docker compose up --build
-# API on http://localhost:8000  (POST /ask, GET /risk?tickers=AAPL,MSFT)
+docker compose build
+docker compose run --rm bench                       # reports appear in ./results
+docker compose run --rm bench --models a,b --repeats 3
 ```
 
-Neo4j browser: http://localhost:7474 (neo4j / fintelpass).
+## Notes
 
-## Keys (all free)
-
-- **NVIDIA_API_KEY** — build.nvidia.com (required for the agent)
-- **FRED_API_KEY** — fred.stlouisfed.org/docs/api/api_key.html (macro)
-- **FINNHUB_API_KEY** — finnhub.io (news)
-- **SEC_USER_AGENT** — any real contact string (SEC requires it; no key)
-
-`.env` is gitignored. Never hardcode keys in `config.py` — it commits to git.
-
-## Notes / ceilings
-
-- Storage is best-effort (`STORAGE_BEST_EFFORT`): agent runs with DBs down.
-- Risk metrics are historical estimates, not forward guarantees.
-- Document parsing (Docling/Tesseract), WebSocket streaming, and 10-K RAG are
-  **not** in this cut — `sec_filings` returns links only. Add when needed.
-- Session memory in the API is in-process; move to Redis for multi-worker.
-```
+- Some listed NIM models 404 on chat (e.g. `nemotron-3-super-120b-a12b` at time of writing);
+  such a model scores 0 with the error recorded rather than crashing the run.
+- Adding/changing a case changes `suite_hash` — re-bench all models afterwards.
+- HTTP 429 / 5xx are retried with exponential backoff (`LLM_MAX_RETRIES`, default 6) so a
+  rate-limited free tier slows a run down instead of zeroing cases.
+- `.env` is gitignored. Never hardcode keys.
+- `report/` holds the project report (`alex_LLM_Tool_Use_Benchmark_Report.docx`).

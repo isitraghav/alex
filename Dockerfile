@@ -1,4 +1,4 @@
-# uv-based image. Runs the FastAPI service by default; override cmd for CLI.
+# Runs the benchmark. Pass flags after the image name, e.g. `--models a,b`.
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -8,5 +8,4 @@ RUN uv sync --no-dev --no-install-project   # cache deps layer
 COPY alex ./alex
 RUN uv sync --no-dev
 
-EXPOSE 8000
-CMD ["uv", "run", "alex-api"]
+ENTRYPOINT ["uv", "run", "--no-dev", "alex"]
