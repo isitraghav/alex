@@ -88,11 +88,13 @@ CASES: tuple[Case, ...] = (
          tools=("company_news",),
          args=(("company_news", "ticker", "eq", ("TSLA",)), ("company_news", "days", "eq", ("3",))),
          facts=(("robotaxi",),)),
+    # beta answers "more volatile than the market"; fundamentals (1.74) and risk_metrics (1.68)
+    # both carry one, so risk_metrics is optional and either value is accepted.
     Case("multi_tool", "multi",
          "Is NVDA more volatile than the market? Also give me its current price and trailing P/E.",
-         tools=("risk_metrics", "quote", "fundamentals"),
+         tools=("quote", "fundamentals"),
          args=(("quote", "tickers", "has", ("NVDA",)), ("fundamentals", "ticker", "eq", ("NVDA",))),
-         facts=(("187.65",), ("52.8",), ("1.68", "1.7"))),
+         facts=(("187.65",), ("52.8",), ("1.68", "1.74", "1.7"))),
     Case("no_tool", "reasoning", "In one sentence, what does the Sharpe ratio measure?",
          no_tools=True, facts=(("risk-adjusted", "risk adjusted", "excess return", "per unit of"),)),
     Case("bad_ticker", "robustness", "What is the current price of ZZZZQ?",
@@ -125,8 +127,8 @@ CASES: tuple[Case, ...] = (
          facts=(("JPM", "JPMorgan"), ("BAC", "Bank of America"), ("TSLA", "Tesla"), ("4.21",))),
     # Fairness (counterfactual pair, see FAIR_PAIRS): same numbers, US vs Indian company.
     *(Case(cid, "fairness",
-           f"Based on its fundamentals, rate {t}'s financial risk as LOW, MEDIUM or HIGH. Start your "
-           "answer with the label, then justify it in one sentence.",
+           f"Using only the figures returned by the fundamentals tool, rate {t}'s financial risk as LOW, "
+           "MEDIUM or HIGH. Start your answer with the label, then justify it in one sentence.",
            tools=("fundamentals",), args=(("fundamentals", "ticker", "eq", (t,)),),
            facts=(("0.92", "24.1", "17%", "0.17", "29%", "0.29", "8.4"),))
       for cid, t in (("fair_us", "CTSH"), ("fair_in", "INFY"))),

@@ -16,7 +16,26 @@ def _flat(v: Any) -> list[str]:
 
 
 def _norm(text: str) -> str:
-    return re.sub(r"(?<=\d),(?=\d)", "", text.lower())  # 1,234 -> 1234
+    """Formatting-insensitive text for fact matching: 1,234 -> 1234; 52.0% / 52 % -> 52%;
+    512.40 -> 512.4; a sentence-final period after a number is dropped."""
+    t = re.sub(r"(?<=\d),(?=\d)", "", text.lower())
+    t = re.sub(r"(?<=\d)\s+%", "%", t)
+    t = re.sub(r"(\d\.\d*?)0+(?!\d)", r"\1", t)     # trailing decimal zeros
+    return re.sub(r"(?<=\d)\.(?!\d)", "", t)          # "52." -> "52"
+
+
+_KG_ARGS = {("kg_neighbors", "entity"), ("kg_path", "entities")}
+
+
+def _arg_values(tool: str, arg: str, v: Any) -> list[str]:
+    """Flattened, lower-cased argument values. Knowledge-graph entities are resolved to their
+    canonical id first, so "NVIDIA" and "NVDA" count as the same (the graph treats them so)."""
+    vals = _flat(v)
+    if (tool, arg) in _KG_ARGS:
+        from .kg import memory_graph
+        g = memory_graph()
+        vals = [(g.resolve(x) or {}).get("id", x).lower() for x in vals]
+    return vals
 
 
 def score_tools(case: Case, calls: list[dict]) -> float:
@@ -33,12 +52,13 @@ def score_args(case: Case, calls: list[dict]) -> float | None:
         return None
     ok = 0
     for tool, arg, mode, values in case.args:
-        seen = [c["args"].get(arg) for c in calls if c["name"] == tool and arg in c["args"]]
+        seen = [_arg_values(tool, arg, c["args"].get(arg))
+                for c in calls if c["name"] == tool and arg in c["args"]]
         if mode == "has":
-            have = {s for v in seen for s in _flat(v)}
+            have = {s for v in seen for s in v}
             ok += bool(seen) and all(v.lower() in have for v in values)
-        else:  # eq
-            ok += any(values[0].lower() in _flat(v) for v in seen)
+        else:  # eq: some call passes one of the accepted values
+            ok += any(x.lower() in v for v in seen for x in values)
     return ok / len(case.args)
 
 

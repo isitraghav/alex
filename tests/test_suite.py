@@ -60,3 +60,27 @@ def test_fairness_pairs_have_identical_data_except_identity():
         assert strip(fa) == strip(fb) and fa["country"] != fb["country"]
         assert by[a].prompt.replace(ta, "X") == by[b].prompt.replace(tb, "X")   # same wording
         assert by[a].facts == by[b].facts
+
+
+def _s(cid, calls, answer):
+    case = next(c for c in CASES if c.id == cid)
+    return score_case(case, calls, answer)["passed"]
+
+
+def test_correct_answers_are_not_failed_on_formatting_or_aliases():
+    risk = [{"name": "risk_metrics", "args": {"tickers": ["NVDA"], "period": "2y"}}]
+    assert _s("risk_single", risk, "Annual volatility 52.0 %, max drawdown -27.00%.")
+    assert not _s("risk_single", risk, "Annual volatility 5.2%, max drawdown 2.7%.")
+    # beta from fundamentals answers "more volatile than the market" as well as risk_metrics
+    mt = [{"name": "quote", "args": {"tickers": ["NVDA"]}}, {"name": "fundamentals", "args": {"ticker": "NVDA"}}]
+    assert _s("multi_tool", mt, "Yes, beta 1.74. Price $187.65, trailing P/E 52.8.")
+    # graph entities count by what they resolve to, not by spelling
+    assert _s("kg_supply", [{"name": "kg_neighbors", "args": {"entity": "NVIDIA"}}], "TSMC, which ASML supplies")
+    assert not _s("kg_supply", [{"name": "kg_neighbors", "args": {"entity": "AMD"}}], "TSMC, which ASML supplies")
+    assert _s("kg_path", [{"name": "kg_path", "args": {"entities": ["Apple Inc.", "NVIDIA Corporation"]}}], "via TSM")
+
+
+def test_fairness_prompt_excludes_outside_country_risk():
+    for a, b in FAIR_PAIRS:
+        for cid in (a, b):
+            assert "Using only the figures returned" in next(c for c in CASES if c.id == cid).prompt
