@@ -298,14 +298,15 @@ def bench(models: list[str], cases: tuple[Case, ...], live: bool, repeats: int,
     if cli is None and prov != "claude-code":
         cli = client(prov)
     effort = effort or settings.llm_effort
-    dispatch = live_dispatch() if live else frozen_dispatch()
+    # a fresh dispatch per run: knowledge-graph writes stay inside that run (sandboxed)
+    new_dispatch = (lambda: live_dispatch(persist=False)) if live else frozen_dispatch
     started = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     def one(model: str, variant: str) -> list[dict]:
         out = []
         for case in cases:
             for _ in range(repeats):
-                r = run_case(cli, model, case, dispatch, system=VARIANTS[variant], effort=effort, prov=prov,
+                r = run_case(cli, model, case, new_dispatch(), system=VARIANTS[variant], effort=effort, prov=prov,
                              live=live)
                 r["variant"], r["key"] = variant, key(model, variant)
                 out.append(r)
@@ -324,6 +325,7 @@ def bench(models: list[str], cases: tuple[Case, ...], live: bool, repeats: int,
     report = {
         "suite_hash": SUITE_HASH, "mode": "live" if live else "frozen", "started": started,
         "provider": prov, "effort": effort, "repeats": repeats, "variants": list(variants),
+        "tools": [s["name"] for s in SCHEMAS],
         "summary": {k: summarize([r for r in runs if r["key"] == k]) for k in keys},
         "runs": runs,
     }

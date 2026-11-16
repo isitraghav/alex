@@ -24,7 +24,9 @@ def _norm(text: str) -> str:
     return re.sub(r"(?<=\d)\.(?!\d)", "", t)          # "52." -> "52"
 
 
-_KG_ARGS = {("kg_neighbors", "entity"), ("kg_path", "entities")}
+_KG_ARGS = {("kg_neighbors", "entity"), ("kg_path", "entities"), ("kg_add_entity", "entity"),
+            ("kg_add_relation", "source"), ("kg_add_relation", "target"),
+            ("kg_delete_relation", "source"), ("kg_delete_relation", "target"), ("kg_delete_entity", "entity")}
 
 
 def _arg_values(tool: str, arg: str, v: Any) -> list[str]:

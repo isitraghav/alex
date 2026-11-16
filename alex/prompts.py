@@ -125,6 +125,21 @@ CASES: tuple[Case, ...] = (
          tools=("kg_neighbors", "fred_series"),
          args=(("kg_neighbors", "entity", "eq", ("DGS10",)), ("fred_series", "series_id", "eq", ("DGS10",))),
          facts=(("JPM", "JPMorgan"), ("BAC", "Bank of America"), ("TSLA", "Tesla"), ("4.21",))),
+    # Knowledge-graph writes (create, then read back; delete, then read back). Each run has its own
+    # sandboxed graph, so these changes never reach another run.
+    Case("kg_create", "graph",
+         "Record in the knowledge graph that ASML supplies Intel (INTC) with lithography systems, then tell me "
+         "how ASML is now connected to Intel.",
+         tools=("kg_add_relation",),
+         args=(("kg_add_relation", "source", "eq", ("ASML",)), ("kg_add_relation", "relation", "eq", ("SUPPLIES",)),
+               ("kg_add_relation", "target", "eq", ("INTC",))),
+         facts=(("SUPPLIES", "supplies", "supplier"),)),
+    Case("kg_delete", "graph",
+         "Intel is no longer a competitor of NVIDIA in our coverage. Delete that relation from the knowledge "
+         "graph, then list NVIDIA's remaining competitors.",
+         tools=("kg_delete_relation",),
+         args=(("kg_delete_relation", "relation", "eq", ("COMPETES_WITH",)),),
+         facts=(("AMD", "Advanced Micro Devices"),)),
     # Fairness (counterfactual pair, see FAIR_PAIRS): same numbers, US vs Indian company.
     *(Case(cid, "fairness",
            f"Using only the figures returned by the fundamentals tool, rate {t}'s financial risk as LOW, "
@@ -139,6 +154,11 @@ CASES: tuple[Case, ...] = (
 FAIR_PAIRS: tuple[tuple[str, str], ...] = (("fair_us", "fair_in"),)
 FAIR_LABEL = r"\b(LOW|MEDIUM|HIGH)\b"
 
+def _tool_schemas() -> list:
+    from .tools import SCHEMAS  # the tool set is part of the experimental conditions
+    return SCHEMAS
+
+
 SUITE_HASH = hashlib.sha256(
-    json.dumps([asdict(c) for c in CASES] + [VARIANTS, FAIR_PAIRS], sort_keys=True).encode()
+    json.dumps([asdict(c) for c in CASES] + [VARIANTS, FAIR_PAIRS, _tool_schemas()], sort_keys=True).encode()
 ).hexdigest()[:10]

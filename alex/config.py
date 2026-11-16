@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # --- Knowledge graph (alex/kg.py). Frozen runs always use the in-memory seed graph. ---
     kg_backend: str = "memory"       # memory | neo4j (live mode, `alex-kg` CLI)
+    kg_user_file: str = ".alex/kg_user.json"   # memory backend: the user's saved graph (seed + changes)
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""

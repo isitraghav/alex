@@ -165,8 +165,14 @@ def tiers(rep):
 
 
 if __name__ == "__main__":
+    rep = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")) if len(sys.argv) > 1 and Path(sys.argv[1]).exists() else None
+    if rep:   # draw the suite that produced the results
+        from alex.tools import WRITE_TOOLS
+        CASES = tuple(c for c in CASES if c.id in {r["case"] for r in rep["runs"]})
+        _t = set(rep.get("tools") or [s["name"] for s in SCHEMAS if s["name"] not in WRITE_TOOLS])
+        SCHEMAS = [s for s in SCHEMAS if s["name"] in _t]
     pipeline()
     graph()
-    if len(sys.argv) > 1 and Path(sys.argv[1]).exists():
-        tiers(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")))
+    if rep:
+        tiers(rep)
     print("figures ->", OUT)

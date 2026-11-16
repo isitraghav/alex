@@ -12,17 +12,26 @@ Dispatch = dict[str, Callable[..., Any]]
 
 
 def _kg_tools(g: Any) -> Dispatch:
+    from . import kg
     return {
         "kg_neighbors": lambda entity, relation=None, direction="both", limit=25:
             g.neighbors(entity, relation, direction, limit),
         "kg_path": lambda entities, max_hops=4, relations=None: g.path(entities, max_hops, relations),
+        "kg_add_entity": lambda entity, label=None, name=None, properties=None:
+            kg.upsert_entity(g, entity, label, name, properties),
+        "kg_add_relation": lambda source, relation, target, properties=None:
+            kg.upsert_relation(g, source, relation, target, properties),
+        "kg_delete_relation": lambda source, relation, target: kg.delete_relation(g, source, relation, target),
+        "kg_delete_entity": lambda entity: kg.delete_entity(g, entity),
     }
 
 
-def live_dispatch() -> Dispatch:
+def live_dispatch(persist: bool = True) -> Dispatch:
+    """Live data. persist=True: graph changes are saved (chat, alex-kg); persist=False: graph
+    changes stay in a private sandbox copy (live benchmark runs)."""
     from . import analysis, kg, sources  # lazy: frozen mode needs no network libs
     return {
-        **_kg_tools(kg.graph(live=True)),
+        **_kg_tools(kg.graph(live=True, persist=persist)),
         "quote": lambda tickers: sources.quote(tickers),
         "fundamentals": lambda ticker: sources.fundamentals(ticker),
         "risk_metrics": lambda tickers, period="1y": analysis.risk_metrics(tickers, period=period),
@@ -34,8 +43,10 @@ def live_dispatch() -> Dispatch:
 
 
 def frozen_dispatch() -> Dispatch:
+    """Fixed data and a FRESH seed graph: call once per run, so knowledge-graph writes made in
+    one run can never reach another run or another model."""
     from . import fixtures, kg
-    return {**fixtures.DISPATCH, **_kg_tools(kg.memory_graph())}
+    return {**fixtures.DISPATCH, **_kg_tools(kg.graph(live=False))}
 
 
 _STR = {"type": "string"}
@@ -96,6 +107,28 @@ SCHEMAS = [
            "relations": {"type": "array", "items": {"type": "string"},
                          "description": "optional: only traverse these relation types, e.g. ['SUPPLIES']"}},
           ["entities"]),
+    # --- knowledge-graph writes (create / update / delete) ---
+    _tool("kg_add_entity",
+          "Knowledge graph: create an entity, or update the name / properties of an existing one. "
+          "A new entity needs a label (Company, Industry, Sector, Country, MacroSeries, ...).",
+          {"entity": {**_STR, "description": "id, e.g. a ticker such as SMCI"},
+           "label": {**_STR, "description": "type of a NEW entity, e.g. Company"},
+           "name": {**_STR, "description": "display name, e.g. Super Micro Computer"},
+           "properties": {"type": "object", "description": "optional extra facts: name -> text/number"}},
+          ["entity"]),
+    _tool("kg_add_relation",
+          "Knowledge graph: create a relation between two existing entities, or update its properties "
+          "(e.g. ASML SUPPLIES INTC with product). Relation names are one upper-case word.",
+          {"source": _STR, "relation": {**_STR, "description": "e.g. SUPPLIES, COMPETES_WITH, PARTNERS_WITH"},
+           "target": _STR, "properties": {"type": "object", "description": "optional, e.g. {product: ...}"}},
+          ["source", "relation", "target"]),
+    _tool("kg_delete_relation",
+          "Knowledge graph: delete one relation between two entities.",
+          {"source": _STR, "relation": _STR, "target": _STR}, ["source", "relation", "target"]),
+    _tool("kg_delete_entity",
+          "Knowledge graph: delete an entity and every relation that touches it.",
+          {"entity": _STR}, ["entity"]),
 ]
+WRITE_TOOLS = {"kg_add_entity", "kg_add_relation", "kg_delete_relation", "kg_delete_entity"}
 
 OPENAI_SCHEMAS = openai_format(SCHEMAS)

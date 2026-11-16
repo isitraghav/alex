@@ -5,7 +5,8 @@ model running under the Claude Code CLI (subscription login) calls exactly the s
 tools, with the same schemas and the same frozen fixtures, as the API providers.
 
   python -m alex.mcp_server            frozen fixtures (default)
-  python -m alex.mcp_server --live     real data sources
+  python -m alex.mcp_server --live     real data sources; knowledge-graph changes are saved
+  python -m alex.mcp_server --live --sandbox   real data; graph changes are discarded (benchmark)
 
 Protocol: newline-delimited JSON-RPC 2.0 on stdin/stdout (MCP stdio transport).
 Only what a tool-only server needs: initialize, ping, tools/list, tools/call.
@@ -62,7 +63,8 @@ def handle(dispatch: dict, msg: dict) -> dict | None:
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
-    dispatch = live_dispatch() if "--live" in argv else frozen_dispatch()
+    # --sandbox: graph writes are not saved (benchmark); frozen mode is always a fresh sandbox
+    dispatch = live_dispatch(persist="--sandbox" not in argv) if "--live" in argv else frozen_dispatch()
     inp = sys.stdin.buffer
     out = sys.stdout.buffer
     for raw in inp:

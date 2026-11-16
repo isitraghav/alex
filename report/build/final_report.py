@@ -30,7 +30,7 @@ from alex.audit import ADDITIONS, rescore  # noqa: E402
 from alex.diagnose import RULES  # noqa: E402
 from alex.prompts import CASES, FAIR_PAIRS, SUITE_HASH, VARIANTS  # noqa: E402
 from alex.stats import HYPOTHESES, analyze, fairness  # noqa: E402
-from alex.tools import SCHEMAS  # noqa: E402
+from alex.tools import SCHEMAS, WRITE_TOOLS  # noqa: E402
 
 TEMPLATE = ROOT / "report" / "reference" / "Final_Project_Report_Template.docx"
 OUT = ROOT / "report" / "alex_Final_Project_Report.docx"
@@ -44,6 +44,14 @@ REP = json.loads(Path(sys.argv[1] if len(sys.argv) > 1 else HERE / "data" / "ben
 AN = analyze(REP)
 AUD, CHANGED = rescore(REP)
 SUMM, RUNS = REP["summary"], REP["runs"]
+# Describe the suite that produced these results, not the current code: cases that were run, the
+# tool set recorded in the result file (runs before tools were recorded used the read-only tools),
+# and the result file's suite hash.
+ALL_SCHEMAS = SCHEMAS
+CASES = tuple(c for c in CASES if c.id in {r["case"] for r in RUNS})
+_ran_tools = set(REP.get("tools") or [s["name"] for s in SCHEMAS if s["name"] not in WRITE_TOOLS])
+SCHEMAS = [s for s in SCHEMAS if s["name"] in _ran_tools]
+SUITE_HASH = REP.get("suite_hash", SUITE_HASH)
 MODELS = [m for m in ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5") if any(k.startswith(m) for k in SUMM)]
 VARS = [v for v in ("minimal", "default", "grounded") if any(k.endswith("@" + v) for k in SUMM)]
 NAME = {"claude-haiku-5-5": "Haiku 5.5", "claude-sonnet-5-5": "Sonnet 5.5", "claude-opus-5-5": "Opus 5.5"}
@@ -529,6 +537,12 @@ rel_doc = {"IN_INDUSTRY": ("Company", "Industry"), "PART_OF": ("Industry", "Sect
 T("Relations in the knowledge graph", ["Relation", "From", "To", "Edges"],
   [[r, *rel_doc.get(r, ("", "")), n] for r, n in KGS["relations"].items()], widths=[4.6, 4.0, 4.6, 2.2], numeric_from=3)
 FIGURE("kg.png", f"The financial knowledge graph ({KGS['nodes']} entities, {KGS['edges']} relations)", 16.4)
+P(f"Since the experiment, alex has also gained {len(WRITE_TOOLS)} write tools — kg_add_entity, kg_add_relation, "
+  "kg_delete_relation and kg_delete_entity — so the model can create, update and delete knowledge as well as read "
+  "it (full CRUD). Every change is validated and stamped with its source and date. In chat the changes are saved "
+  "(Neo4j or a local file); in a benchmark each run works on its own copy of the graph, so one run's changes can "
+  "never affect another. The tool set is part of the suite fingerprint, so results with and without these tools "
+  "are never mixed; the runs reported in Section 7 used the read-only tools.", "Editing the graph. ")
 P("The graph is implemented twice with identical answers: in memory for the benchmark (so every model sees the "
   "same graph) and in Neo4j for live use, checked by a parity test. The model queries it through two general "
   "tools, kg_neighbors (related entities, optionally by relation type) and kg_path (the shortest chain of "

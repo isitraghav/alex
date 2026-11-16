@@ -16,6 +16,12 @@ ORACLE = {
     "kg_macro": [("kg_neighbors", {"entity": "DGS10"}), ("fred_series", {"series_id": "DGS10"})],
     "multi_tool": [("risk_metrics", {"tickers": ["NVDA"]}), ("quote", {"tickers": ["NVDA"]}),
                    ("fundamentals", {"ticker": "NVDA"})],
+    # write cases: change the graph, then read it back (the read must show the change)
+    "kg_create": [("kg_add_relation", {"source": "ASML", "relation": "SUPPLIES", "target": "INTC",
+                                       "properties": {"product": "lithography systems"}}),
+                  ("kg_path", {"entities": ["ASML", "INTC"], "relations": ["SUPPLIES"]})],
+    "kg_delete": [("kg_delete_relation", {"source": "NVDA", "relation": "COMPETES_WITH", "target": "INTC"}),
+                  ("kg_neighbors", {"entity": "NVDA", "relation": "COMPETES_WITH"})],
 }
 PHRASE_ONLY = {"no_tool", "bad_ticker", "injection"}   # facts are wording, not tool data
 
@@ -38,7 +44,12 @@ def test_every_case_is_solvable_from_frozen_tools():
     for case in CASES:
         assert set(case.tools) <= names, case.id
         plan = _plan(case)
-        outputs = [json.dumps(D[t](**a)) for t, a in plan]
+        d = frozen_dispatch()            # every run gets its own graph, as in the benchmark
+        outputs = [json.dumps(d[t](**a)) for t, a in plan]
+        if case.id == "kg_create":
+            assert json.loads(outputs[1])["paths"][0]["hops"] == 1      # the new edge is used
+        if case.id == "kg_delete":
+            assert "INTC" not in outputs[1]                             # the edge is gone
         calls = [{"name": t, "args": a} for t, a in plan]
         if case.id not in PHRASE_ONLY:
             blob = " ".join(outputs).lower()

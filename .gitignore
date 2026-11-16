@@ -9,3 +9,4 @@ results/
 report/reference/
 # Word lock files
 ~$*
+.alex/

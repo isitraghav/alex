@@ -87,10 +87,18 @@ To use the same tools from an ordinary Claude Code session instead:
 `alex/kg.py` — 31 entities (companies, industries, sectors, countries, FRED series) and 59 typed
 relations: `IN_INDUSTRY`, `PART_OF`, `DOMICILED_IN`, `SUPPLIES {product}`, `COMPETES_WITH`,
 `CORRELATED {value, period}`, `SENSITIVE_TO {direction, channel}`. The schema is open (any label /
-relation type), and the model gets two generic tools:
+relation type), and the model gets full create / read / update / delete:
 
 - `kg_neighbors(entity, relation?, direction?)` — related entities, filtered by relation type
 - `kg_path(entities, max_hops?, relations?)` — shortest multi-hop connection, optionally restricted
+- `kg_add_entity(entity, label?, name?, properties?)` — create an entity or update an existing one
+- `kg_add_relation(source, relation, target, properties?)` — create or update a relation
+- `kg_delete_relation(source, relation, target)` / `kg_delete_entity(entity)` — remove knowledge
+
+Every change is validated and stamped with `source` and date. Where changes go:
+**chat / `alex-kg`** — saved (Neo4j with `KG_BACKEND=neo4j`, else `.alex/kg_user.json`);
+**benchmark** — each run gets its own copy of the graph, so writes never leak between runs.
+The tool set is part of the suite hash.
 
 Two backends give identical answers (parity-tested, also in CI): the in-memory graph (always used
 in frozen runs) and **Neo4j 5** (`KG_BACKEND=neo4j`, live mode). Queries are fixed and
@@ -101,6 +109,9 @@ docker compose --profile graph up -d neo4j      # needs NEO4J_PASSWORD in .env
 uv run alex-kg load                             # seed graph -> Neo4j (idempotent MERGE)
 uv run alex-kg sync AAPL MSFT NVDA              # add live sector/industry/country/correlations
 uv run alex-kg path AAPL NVDA --relations SUPPLIES
+uv run alex-kg add-relation ASML SUPPLIES INTC --prop product="EUV lithography"
+uv run alex-kg delete-relation NVDA COMPETES_WITH INTC
+uv run alex-kg reset                            # discard saved changes (memory backend)
 uv run alex-kg stats
 ```
 
@@ -118,7 +129,7 @@ Reach the models in **one** of three ways:
 ```bash
 cp .env.example .env
 uv sync --all-extras
-uv run pytest                                    # 62 tests; the live-Neo4j one runs when ALEX_NEO4J_TEST_URI is set (CI)
+uv run pytest                                    # 70 tests; the live-Neo4j ones runs when ALEX_NEO4J_TEST_URI is set (CI)
 uv run alex --variant minimal,default,grounded   # the full ablation (3 tiers x 3 prompts)
 uv run alex --provider claude-code --models claude-haiku-5-5   # through the Claude Code CLI
 uv run alex --variant default --repeats 3        # reliability (pass^k, H6)

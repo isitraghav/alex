@@ -40,13 +40,14 @@ def available() -> bool:
     return shutil.which("claude") is not None
 
 
-@lru_cache(maxsize=2)
-def mcp_config(live: bool) -> str:
-    """Write the MCP config once per process; returns its path."""
-    args = ["-m", "alex.mcp_server"] + (["--live"] if live else [])
+@lru_cache(maxsize=4)
+def mcp_config(live: bool, persist: bool = False) -> str:
+    """Write the MCP config once per process; returns its path. persist=False (benchmark): graph
+    writes stay in a sandbox; persist=True (chat): they are saved to the user's graph."""
+    args = ["-m", "alex.mcp_server"] + (["--live"] if live else []) + ([] if persist or not live else ["--sandbox"])
     cfg = {"mcpServers": {"alex": {"type": "stdio", "command": sys.executable, "args": args,
                                    "cwd": str(ROOT)}}}
-    f = Path(tempfile.gettempdir()) / f"alex-mcp-{'live' if live else 'frozen'}.json"
+    f = Path(tempfile.gettempdir()) / f"alex-mcp-{'live' if live else 'frozen'}{'-save' if persist else ''}.json"
     f.write_text(json.dumps(cfg), encoding="utf-8")
     return str(f)
 
