@@ -23,6 +23,7 @@ alex = "alex.bench:main"
 alex-bench = "alex.bench:main"
 alex-kg = "alex.kg:main"
 alex-mcp = "alex.mcp_server:main"
+alex-chat = "alex.chat:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

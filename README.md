@@ -66,6 +66,22 @@ between two reports, e.g. raw API vs the Claude Code harness.
 **Fuzzy rating** (`alex/fuzzy.py`): accuracy, latency and cost per case → 10 Mamdani rules →
 centroid → 0–100 suitability (poor / fair / good / excellent).
 
+## Chat (no benchmarking)
+
+Ask financial questions in a terminal chat; Claude answers with alex's tools on live data
+(prices, fundamentals, risk metrics, FRED, SEC filings, news, knowledge graph). Uses your
+Claude Code login via `claude -p`; the conversation is remembered across turns.
+
+```bash
+uv run alex-chat                              # Claude Haiku 5.5, live data
+uv run alex-chat --model claude-sonnet-5-5    # another model
+uv run alex-chat --frozen                     # the benchmark's fixed data
+# in the chat: /model <id>, /new (fresh conversation), /exit
+```
+
+To use the same tools from an ordinary Claude Code session instead:
+`claude mcp add alex -- uv run --directory <path-to-alex> alex-mcp --live`
+
 ## Knowledge graph
 
 `alex/kg.py` — 31 entities (companies, industries, sectors, countries, FRED series) and 59 typed
