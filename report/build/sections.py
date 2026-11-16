@@ -423,11 +423,19 @@ if PENDING:
       "US$0.0005 per case, with the MCP server connected and only alex's tools exposed. These checks validate the "
       "harness only and are not part of the results.", italic=True)
 else:
+    _rk = {}
+    for _r in REP["runs"]:
+        _rk.setdefault(_r["key"], {}).setdefault(_r["case"], 0)
+        _rk[_r["key"]][_r["case"]] += 1
+    _rv = {}
+    for _k, _c in _rk.items():
+        _rv.setdefault(min(_c.values()), set()).add(_k.split("@")[1])
+    _reps_txt = "; ".join(f"{n} run(s) per case for the " + "/".join(sorted(v)) + " prompt" for n, v in sorted(_rv.items(), reverse=True))
     total = sum((s.get("total_cost_usd") or 0) for s in SUMM.values())
     _via = {"openrouter": "OpenRouter", "anthropic": "the Claude API",
             "claude-code": "the Claude Code CLI (subscription)"}.get(REP.get("provider", "anthropic"), "the Claude API")
     P(f"All runs used the frozen suite (hash {REP['suite_hash']}), served through {_via}, effort "
-      f"\"{REP.get('effort')}\", {REP['repeats']} repeat(s) per case, on "
+      f"\"{REP.get('effort')}\", {_reps_txt}, on "
       f"{REP['started'][:4]}-{REP['started'][4:6]}-{REP['started'][6:8]}. The complete ablation ({len(SUMM)} "
       f"model × prompt configurations, {len(REP['runs'])} runs) cost US${total:.2f} at list prices"
       + (" (an API-equivalent estimate: the CLI route is covered by the subscription)."
@@ -436,14 +444,14 @@ else:
         P(f"Note: the result file's suite hash differs from the current suite ({SUITE_HASH}).", italic=True)
     CAPTION("Results per model and system prompt (ranked by score, then fuzzy suitability)")
     ci = lambda k: SUMM[k].get("score_ci95") or ("", "")
-    T(["#", "Model · prompt", "Score", "95% CI", "Pass", "Err", "Avg s", "¢/case", "Fair", "Fuzzy rating"],
+    T(["#", "Model · prompt", "Score", "95% CI", "Pass", "Err", "Avg s", "Med s", "¢/case", "Fair", "Fuzzy rating"],
       [[i, short(k) + (" ◆" if k in AN["pareto_front"] else ""), f"{SUMM[k]['score']:.3f}",
         f"{ci(k)[0]:.2f}–{ci(k)[1]:.2f}" if ci(k)[0] != "" else "-", f"{SUMM[k]['pass_rate']:.0%}",
-        SUMM[k]["errors"], SUMM[k]["avg_latency_s"],
+        SUMM[k]["errors"], SUMM[k]["avg_latency_s"], SUMM[k].get("median_latency_s", "-"),
         "-" if SUMM[k].get("avg_cost_usd") is None else f"{SUMM[k]['avg_cost_usd'] * 100:.3f}",
         "-" if SUMM[k].get("fairness_consistency") is None else f"{SUMM[k]['fairness_consistency']:.0%}",
         f"{SUMM[k]['rating']['suitability']} ({SUMM[k]['rating']['label']})"] for i, k in enumerate(RANKED, 1)],
-      widths=[0.6, 4.2, 1.1, 1.7, 1.0, 0.8, 1.0, 1.2, 1.0, 2.4], size=8)
+      widths=[0.6, 4.0, 1.0, 1.6, 0.9, 0.7, 0.9, 0.9, 1.1, 0.9, 2.3], size=7.5)
     P("◆ = on the cost–accuracy Pareto front. Fair = label agreement on the counterfactual fairness pair.", italic=True)
     FIGURE("variants.png", "Score by model and system-prompt variant", 14.5)
     FIGURE("categories.png", f"Mean score per task category ({BASE} prompt)", 15)

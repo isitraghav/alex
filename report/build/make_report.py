@@ -32,7 +32,16 @@ def merge(paths: list[Path]) -> dict:
     out["summary"] = {k: v for r in reps for k, v in r["summary"].items()}
     out["runs"] = [x for r in reps for x in r["runs"]]
     out["variants"] = sorted({v for r in reps for v in r.get("variants", [])})
+    out["repeats"] = max(int(r.get("repeats") or 1) for r in reps)
+    out["started"] = min(r["started"] for r in reps)
+    provs = {r.get("provider") for r in reps}
+    if len(provs) > 1:
+        sys.exit(f"cannot merge reports from different providers: {provs} (use alex --compare)")
     out.pop("analysis", None)   # recomputed by the report builder
+    # summaries are recomputed from the raw runs so every configuration uses the same definitions
+    sys.path.insert(0, str(ROOT))
+    from alex.bench import summarize
+    out["summary"] = {k: summarize([x for x in out["runs"] if x.get("key") == k]) for k in out["summary"]}
     return out
 
 

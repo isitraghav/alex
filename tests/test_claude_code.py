@@ -87,3 +87,35 @@ def test_mcp_server_protocol():
     assert bad["isError"] is True                          # bad args -> tool error, server survives
     unk = mcp_server.handle(d, {"jsonrpc": "2.0", "id": 5, "method": "nope"})
     assert unk["error"]["code"] == -32601
+
+
+def test_stalled_call_is_retried(monkeypatch):
+    import subprocess
+    from types import SimpleNamespace as NS
+    calls = {"n": 0}
+
+    def fake_run(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise subprocess.TimeoutExpired(cmd="claude", timeout=1)
+        return NS(stdout="\n".join(_transcript()), stderr="", returncode=0)
+
+    monkeypatch.setattr(claude_code, "available", lambda: True)
+    monkeypatch.setattr(claude_code.subprocess, "run", fake_run)
+    tr = _Trace()
+    meta = claude_code.run(M, "q", "SYS", "medium", tr)
+    assert meta["attempts"] == 2 and tr.error is None and len(tr.calls) == 1   # first try's state discarded
+
+
+def test_model_errors_are_not_retried(monkeypatch):
+    from types import SimpleNamespace as NS
+    calls = {"n": 0}
+
+    def fake_run(*a, **kw):
+        calls["n"] += 1
+        return NS(stdout="\n".join(_transcript(stop="refusal")), stderr="", returncode=0)
+
+    monkeypatch.setattr(claude_code, "available", lambda: True)
+    monkeypatch.setattr(claude_code.subprocess, "run", fake_run)
+    tr = _Trace()
+    assert claude_code.run(M, "q", "SYS", "medium", tr)["attempts"] == 1 and tr.error == "refusal"

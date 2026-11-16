@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     llm_max_tool_turns: int = 8      # cap agentic loop iterations per prompt
     llm_max_retries: int = 6         # SDK retries w/ exponential backoff on 429 / 5xx / timeouts
     llm_timeout_s: float = 180.0
+    cli_timeout_s: float = 120.0     # claude-code provider: one case; a stalled call is retried (max 3 tries)
     request_delay_s: float = 0.0     # pause between cases; helps stay under rate limits
     prompt_variant: str = "default"  # system prompt variant (see alex/prompts.py VARIANTS)
     results_dir: str = "results"

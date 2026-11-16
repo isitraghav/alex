@@ -16,6 +16,7 @@ errors, the final answer, token usage and an API-equivalent cost estimate.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,11 @@ from typing import Any
 from .config import settings
 
 PREFIX = "mcp__alex__"
+_LIMIT = re.compile(r"(?i)(usage limit|rate limit|limit reached|out of extra usage|too many requests)")
+
+
+class RateLimited(RuntimeError):
+    """The subscription's usage limit was hit: stop the run instead of recording model errors."""
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -124,13 +130,43 @@ def parse(lines: list[str], model: str, tr: Any) -> dict[str, Any]:
     return meta
 
 
-def run(model: str, prompt: str, system: str, effort: str, tr: Any, live: bool = False) -> dict[str, Any]:
+_TRANSIENT = re.compile(r"(?i)(no result event|overloaded|api_error|internal server|\b5\d\d\b|timed out|"
+                        r"connection|ECONNRESET)")
+
+
+def _reset(tr: Any) -> None:
+    tr.calls, tr.answer, tr.error = [], "", None
+    tr.tok_in = tr.tok_out = tr.turns = tr.tool_errors = 0
+    tr.billed = None
+
+
+def run(model: str, prompt: str, system: str, effort: str, tr: Any, live: bool = False,
+        attempts: int = 3) -> dict[str, Any]:
+    """One case = one `claude -p` process. A stalled or transiently failing call (timeout,
+    overload, no result) is retried from scratch, up to `attempts` times: such failures are
+    infrastructure, not model behaviour. Latency is taken from the successful attempt."""
     if not available():
         raise RuntimeError("`claude` CLI not found on PATH - install Claude Code and log in")
-    p = subprocess.run(command(model, system, effort, live), input=prompt, capture_output=True,
-                       text=True, encoding="utf-8", errors="replace", cwd=workdir(),
-                       timeout=settings.llm_timeout_s * settings.llm_max_tool_turns)
-    meta = parse(p.stdout.splitlines(), model, tr)
+    for attempt in range(1, attempts + 1):  # noqa: B007 - read after the loop
+        _reset(tr)
+        try:
+            p = subprocess.run(command(model, system, effort, live), input=prompt, capture_output=True,
+                               text=True, encoding="utf-8", errors="replace", cwd=workdir(),
+                               timeout=settings.cli_timeout_s)
+        except subprocess.TimeoutExpired:
+            tr.error = f"claude -p timed out after {settings.cli_timeout_s:.0f}s"
+            meta: dict[str, Any] = {}
+            continue
+        meta = parse(p.stdout.splitlines(), model, tr)
+        if not (tr.error and _TRANSIENT.search(tr.error + " " + p.stderr)) or _LIMIT.search(tr.error + p.stderr):
+            break
+    meta["attempts"] = attempt
+    rl = meta.get("rate_limit") or {}
+    if tr.error and "timed out" in tr.error:
+        return meta
+    if rl.get("status") == "rejected" or (tr.error and _LIMIT.search(tr.error + p.stderr)):
+        raise RateLimited(f"usage limit reached ({rl.get('rateLimitType') or tr.error}); "
+                          f"resets at {rl.get('resetsAt')}")
     if p.returncode and not tr.error:
         tr.error = f"claude exited {p.returncode}: {p.stderr.strip()[:200]}"
     elif tr.error and "no result event" in tr.error and p.stderr.strip():

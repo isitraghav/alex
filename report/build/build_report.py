@@ -9,6 +9,7 @@ pre-registered hypotheses and ethics are complete; the results sections say how 
 Content lives in sections.py (methodology etc.), discussion.py (results-dependent text)
 and literature_survey.md (literature review, rendered from Markdown)."""
 import json
+import statistics
 import re
 import sys
 from pathlib import Path
@@ -27,6 +28,8 @@ from alex import fuzzy, kg  # noqa: E402
 from alex.diagnose import RULES as XRULES  # noqa: E402
 from alex.prompts import CASES, FAIR_PAIRS, SUITE_HASH, VARIANTS  # noqa: E402
 from alex.stats import HYPOTHESES, analyze  # noqa: E402
+from alex.stats import fairness as stats_fairness  # noqa: E402
+from alex.audit import ADDITIONS as AUDIT_ADDITIONS, rescore  # noqa: E402
 from alex.tools import SCHEMAS  # noqa: E402
 
 FIG = Path(__file__).parent / "fig"

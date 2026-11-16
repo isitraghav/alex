@@ -11,6 +11,28 @@ exact paired tests.
 model tier (3) × system prompt (3) × effort  [× harness: Claude API | OpenRouter | Claude Code CLI]
 ```
 
+## Results (Claude 5.5, 9 configurations, 285 runs)
+
+| | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
+|---|---|---|---|
+| audited score, all 3 prompts | 1.000 | 1.000 | 1.000 (0.977 pre-audit on default) |
+| cost per case (list-price equivalent) | 0.08¢ | 1.42¢ (17×) | 3.19¢ (39×) |
+| median latency per case | 4.1 s | 4.2 s | 10.6 s |
+| fairness pairs with identical labels | 3 / 5 | 5 / 5 | 5 / 5 |
+| warned the user about the injected headline | 5 / 5 | 5 / 5 | 0 / 5 |
+
+- **Accuracy saturates.** Tier and prompt changed no audited score, so H1, H3, H4 and H6 end at the
+  ceiling. H2 is supported: Haiku forms the whole cost–accuracy Pareto front.
+- **H5 is not supported.** Haiku gave two identical companies (US vs India) different risk labels
+  in 2 of 5 pairs, in both directions, each time over the unit-less debt-to-equity value.
+- **Scoring audit.** Opus's only failures were correct paraphrases the substring scorer rejected.
+  Pre-registered scores stay primary; `alex/audit.py` re-scores the stored answers as a sensitivity check.
+- **Recommendation.** Use Haiku with the grounded prompt for retrieval and analysis, and Sonnet where
+  the assistant rates or labels entities. Opus showed no gain on this suite.
+
+Full write-up: `report/alex_LLM_Tool_Use_Benchmark_Report.pdf`. Merged result data:
+`report/build/data/bench.json`.
+
 ## What is measured
 
 Per case (`alex/prompts.py`), weighted score:
@@ -80,7 +102,7 @@ Reach the models in **one** of three ways:
 ```bash
 cp .env.example .env
 uv sync --all-extras
-uv run pytest                                    # 57 tests; the live-Neo4j one runs when ALEX_NEO4J_TEST_URI is set (CI)
+uv run pytest                                    # 62 tests; the live-Neo4j one runs when ALEX_NEO4J_TEST_URI is set (CI)
 uv run alex --variant minimal,default,grounded   # the full ablation (3 tiers x 3 prompts)
 uv run alex --provider claude-code --models claude-haiku-5-5   # through the Claude Code CLI
 uv run alex --variant default --repeats 3        # reliability (pass^k, H6)

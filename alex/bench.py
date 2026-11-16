@@ -147,6 +147,8 @@ def run_case(cli: Any, model: str, case: Case, dispatch: Dispatch,
             meta = claude_code.run(model, case.prompt, system, effort, tr, live=live)
         else:
             loop(cli, model, case, dispatch, system, effort, tr)
+    except claude_code.RateLimited:
+        raise  # stop the whole run: these would not be model errors
     except Exception as e:  # noqa: BLE001 - API/network failure for this case
         tr.error = f"{type(e).__name__}: {str(e)[:200]}"
     latency = time.perf_counter() - t0
@@ -169,7 +171,7 @@ def run_case(cli: Any, model: str, case: Case, dispatch: Dispatch,
     }
     if meta:
         rl = meta.get("rate_limit") or {}
-        run.update(served_model=meta.get("served_model"), wall_s=meta.get("wall_s"),
+        run.update(served_model=meta.get("served_model"), wall_s=meta.get("wall_s"), attempts=meta.get("attempts"),
                    rate_limit_utilization=rl.get("utilization"))
     run["diagnosis"] = diagnose(case, run)
     return run
@@ -207,6 +209,7 @@ def summarize(runs: list[dict]) -> dict[str, Any]:
         "pass_rate": round(sum(r["passed"] for r in runs) / len(runs), 4),
         "errors": sum(bool(r["error"]) for r in runs),
         "avg_latency_s": round(avg_lat, 2),
+        "median_latency_s": round(statistics.median(lat), 2),
         "p95_latency_s": lat[min(len(lat) - 1, int(0.95 * len(lat)))],
         "avg_tokens": round(statistics.mean(r["tokens"] for r in runs)),
         "avg_tool_calls": round(statistics.mean(r["tool_calls"] for r in runs), 2),
@@ -326,11 +329,17 @@ def bench(models: list[str], cases: tuple[Case, ...], live: bool, repeats: int,
     }
     report["analysis"] = analyze(report)   # CIs, Pareto front, fairness, hypotheses H1-H6
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"bench-{started}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    # unique name even when parallel runs start in the same second (one per model is common)
+    tag = keys[0].replace("@", "_") if len(keys) == 1 else f"{len(keys)}cfg"
+    stem, n = f"bench-{started}-{tag}", 1
+    while (out_dir / f"{stem}.json").exists():
+        n += 1
+        stem = f"bench-{started}-{tag}-{n}"
+    (out_dir / f"{stem}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     md = markdown(report)
-    (out_dir / f"bench-{started}.md").write_text(md, encoding="utf-8")
+    (out_dir / f"{stem}.md").write_text(md, encoding="utf-8")
     log("\n" + md)
-    log(f"saved: {out_dir / f'bench-{started}.json'}")
+    log(f"saved: {out_dir / f'{stem}.json'}")
     return report
 
 

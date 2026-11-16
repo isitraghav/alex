@@ -67,11 +67,12 @@ def results_figures():
 
   # 2. category heatmap (base variant)
   cats = sorted({c for s in summ.values() for c in s["by_category"]})
-  mat = [[summ[f"{m}@{base}"]["by_category"].get(c, 0) for c in cats] for m in models]
-  fig, ax = plt.subplots(figsize=(8.5, 0.55 * len(models) + 1.3))
+  mb = [m for m in models if f"{m}@{base}" in summ]   # models that ran the base prompt
+  mat = [[summ[f"{m}@{base}"]["by_category"].get(c, 0) for c in cats] for m in mb]
+  fig, ax = plt.subplots(figsize=(8.5, 0.55 * len(mb) + 1.3))
   im = ax.imshow(mat, cmap=LinearSegmentedColormap.from_list("seq", SEQ), vmin=0, vmax=1, aspect="auto")
   ax.set_xticks(range(len(cats)), cats, rotation=30, ha="right")
-  ax.set_yticks(range(len(models)), [nice(m) for m in models])
+  ax.set_yticks(range(len(mb)), [nice(m) for m in mb])
   for i, row in enumerate(mat):
       for j, v in enumerate(row):
           ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=8, color=INK if v < 0.6 else "#ffffff")
@@ -103,10 +104,10 @@ def results_figures():
   save(fig, "cost.png")
 
   # 4. fuzzy suitability (base variant) with latency + cost annotation
-  fig, ax = plt.subplots(figsize=(7.5, 0.65 * len(models) + 0.9))
-  vals = [summ[f"{m}@{base}"]["rating"]["suitability"] for m in models]
-  ax.barh([nice(m) for m in models], vals, color=[MCOL[m] for m in models], height=0.5)
-  for i, m in enumerate(models):
+  fig, ax = plt.subplots(figsize=(7.5, 0.65 * len(mb) + 0.9))
+  vals = [summ[f"{m}@{base}"]["rating"]["suitability"] for m in mb]
+  ax.barh([nice(m) for m in mb], vals, color=[MCOL[m] for m in mb], height=0.5)
+  for i, m in enumerate(mb):
       s = summ[f"{m}@{base}"]
       ax.text(vals[i] + 1, i, f"{s['rating']['suitability']} ({s['rating']['label']})  ·  "
               f"{s['avg_latency_s']} s  ·  {s['avg_cost_usd'] * 100:.2f}¢/case", va="center", fontsize=8.5, color=INK)

@@ -105,8 +105,13 @@ def fairness(runs: list[dict]) -> dict[str, Any]:
             ok = la is not None and la == lb
             same += ok
             pairs.append({"pair": f"{a}/{b}", "labels": [la, lb], "consistent": ok})
+    order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    first_higher = sum(1 for p in pairs if not p["consistent"] and None not in p["labels"]
+                       and order[p["labels"][0]] > order[p["labels"][1]])
+    second_higher = sum(1 for p in pairs if not p["consistent"] and None not in p["labels"]
+                        and order[p["labels"][0]] < order[p["labels"][1]])
     return {"pairs": len(pairs), "consistency": round(same / len(pairs), 4) if pairs else None,
-            "detail": pairs}
+            "first_rated_riskier": first_higher, "second_rated_riskier": second_higher, "detail": pairs}
 
 
 def _scores(runs: list[dict], key: str) -> dict[str, list[dict]]:
@@ -169,9 +174,12 @@ def analyze(report: dict) -> dict[str, Any]:
         H["H1"] = {"claim": HYPOTHESES["H1"], "scores": dict(zip(models, sc)), "test": t,
                    "verdict": _verdict(mono, t["score"]["p"], ceiling=min(sc) >= 0.99)}
 
-        # H2 cost efficiency of the cheapest tier
-        cheap, best = f"{models[0]}@{base}", max(sc)
-        on_front = cheap in out["pareto_front"]
+        # H2 cost efficiency of the cheapest TIER (any of its prompt configurations), as worded
+        tier = [k for k in summ if k.startswith(models[0] + "@")]
+        front_tier = [k for k in tier if k in out["pareto_front"]]
+        cheap = max(front_tier or tier, key=lambda k: summ[k]["score"])
+        best = max(s["score"] for s in summ.values())
+        on_front = bool(front_tier)
         gap = round(best - summ[cheap]["score"], 4)
         H["H2"] = {"claim": HYPOTHESES["H2"], "config": cheap, "on_pareto_front": on_front,
                    "gap_to_best": gap, "verdict": "supported" if on_front and gap <= 0.05 else "not supported"}
@@ -215,16 +223,21 @@ def analyze(report: dict) -> dict[str, Any]:
                                     if not d["consistent"]],
                    "verdict": "supported" if worst == 1.0 else "not supported"}
 
-    # H6 reliability under repetition
-    reps = int(report.get("repeats") or 1)
-    if reps > 1:
-        rel = {}
-        for k in summ:
-            rk = [r for r in runs if r.get("key") == k]
-            rel[k] = {"pass^1": pass_hat_k(rk, 1), f"pass^{reps}": pass_hat_k(rk, reps)}
+    # H6 reliability under repetition (only configurations whose every case was repeated)
+    rel = {}
+    for k in summ:
+        rk = [r for r in runs if r.get("key") == k]
+        counts: dict[str, int] = {}
+        for r in rk:
+            counts[r["case"]] = counts.get(r["case"], 0) + 1
+        reps = min(counts.values()) if counts else 1
+        if reps > 1:
+            rel[k] = {"k": reps, "pass^1": pass_hat_k(rk, 1), f"pass^{reps}": pass_hat_k(rk, reps)}
             summ[k][f"pass_hat_{reps}"] = rel[k][f"pass^{reps}"]
-        holds = any(v[f"pass^{reps}"] < v["pass^1"] for v in rel.values())
-        H["H6"] = {"claim": HYPOTHESES["H6"], "reliability": rel, "verdict": _verdict(holds)}
+    if rel:
+        holds = any(v[f"pass^{v['k']}"] < v["pass^1"] for v in rel.values())
+        ceiling = all(v["pass^1"] >= 0.99 for v in rel.values())
+        H["H6"] = {"claim": HYPOTHESES["H6"], "reliability": rel, "verdict": _verdict(holds, ceiling=ceiling)}
     return out
 
 
