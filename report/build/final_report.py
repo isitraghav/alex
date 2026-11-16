@@ -53,6 +53,11 @@ FLAG = re.compile(r"(?i)(prompt.?injection|inject|suspicious|manipulat|disregard
 
 doc = Document(str(TEMPLATE))
 body = doc.element.body
+# The template's side margins are uneven (left 2.52 cm, right 0.69 cm), which pushes every page
+# off-centre. Use equal 2.54 cm side margins; top and bottom stay as in the template.
+for _s in doc.sections:
+    _s.left_margin = _s.right_margin = Cm(2.54)
+USABLE = (doc.sections[0].page_width - doc.sections[0].left_margin - doc.sections[0].right_margin) / 360000
 
 
 # ----------------------------------------------------------------- typography ----
@@ -196,6 +201,8 @@ def T(caption, header, rows, widths=None, numeric_from=None):
     trPr = t.rows[0]._tr.get_or_add_trPr()
     h = OxmlElement("w:tblHeader"); h.set(qn("w:val"), "true"); trPr.append(h)
     if widths:
+        k = min(1.0, (USABLE - 0.1) / sum(widths))
+        widths = [w * k for w in widths]
         for r in t.rows:
             for i, w in enumerate(widths):
                 r.cells[i].width = Cm(w)
@@ -210,7 +217,7 @@ def T(caption, header, rows, widths=None, numeric_from=None):
 
 
 def FIGURE(name, caption, width=16.0):
-    doc.add_picture(str(FIG / name), width=Cm(width))
+    doc.add_picture(str(FIG / name), width=Cm(min(width, USABLE)))
     p = doc.paragraphs[-1]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.keep_with_next = True
@@ -250,6 +257,18 @@ for r in decl.runs:
     r.text = r.text.replace("<Project Title>", TITLE).replace("Machine Learning", COURSE)
 if "<Project Title>" in decl.text or "Machine Learning" in decl.text:   # placeholder split across runs
     set_text(decl, decl.text.replace("<Project Title>", TITLE).replace("Machine Learning", COURSE))
+# The template places its cover lines with hand-tuned indents that compensated for its uneven
+# margins; with equal margins they pull the cover sideways. Drop them and centre the cover.
+for i in list(range(0, 20)) + [21]:
+    _cp = P_(i)
+    _ind = _cp._p.find(qn("w:pPr") + "/" + qn("w:ind"))
+    if _ind is not None:
+        _ind.getparent().remove(_ind)
+    if i != 21:
+        _cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # only text runs that start with padding spaces (setting .text on the logo's run would delete it)
+        if _cp.runs and _cp.runs[0].text[:1] == " " and _cp.runs[0]._r.find(qn("w:drawing")) is None:
+            _cp.runs[0].text = _cp.runs[0].text.lstrip()
 for i in (13, 14, 25):                       # template has four student slots; the team has three
     paras[i].getparent().remove(paras[i])
 
