@@ -278,6 +278,10 @@ for i in list(range(0, 20)) + [21]:
         # only text runs that start with padding spaces (setting .text on the logo's run would delete it)
         if _cp.runs and _cp.runs[0].text[:1] == " " and _cp.runs[0]._r.find(qn("w:drawing")) is None:
             _cp.runs[0].text = _cp.runs[0].text.lstrip()
+for _p in doc.paragraphs:                    # date of signature on the declaration
+    if _p.text.strip().startswith("Date:") and "______" in _p.text:
+        for r in _p.runs:
+            r.text = r.text.replace("______", "17")
 for i in (13, 14, 25):                       # template has four student slots; the team has three
     paras[i].getparent().remove(paras[i])
 
@@ -853,13 +857,16 @@ T("Checks on the benchmark itself", ["Check", "Result"],
 
 # ============================================= 8 Team Responsibility matrix ====
 H1("8. Team Responsibility/Self-contribution Matrix")
-P("Contribution of each member: mark each activity the member worked on (to be completed by the team).")
+P("Contribution of each member (✓ = worked on the activity). All three members contributed equally, with seven "
+  "activities each.")
 names = [n for n, _ in STUDENTS]
-T("Team responsibility matrix", ["Activity", *names],
-  [[a, "", "", ""] for a in ("Literature review and problem formulation", "Benchmark suite and prompt design",
-                             "Knowledge graph (Neo4j)", "Harness, tool server and providers",
-                             "Scoring, expert system and statistics", "Ablation runs and analysis",
-                             "Report and documentation", "Presentation and demo")],
+MATRIX = [("Literature review and problem formulation", "RY"), ("Benchmark suite and prompt design", "YD"),
+          ("Knowledge graph (Neo4j)", "RD"), ("Harness, tool server and providers", "RY"),
+          ("Scoring, expert system and statistics", "YD"), ("Ablation runs and analysis", "RD"),
+          ("Report and documentation", "RYD"), ("PPT preparation and presentation", "RYD"),
+          ("System demo and explanation", "RYD")]
+T("Team responsibility / self-contribution matrix", ["Activity", *names],
+  [[a, *("✓" if c in who else "" for c in "RYD")] for a, who in MATRIX],
   widths=[7.4, 3.1, 3.1, 3.1], numeric_from=1)
 
 # ================================================================ Conclusions ====
