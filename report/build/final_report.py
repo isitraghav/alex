@@ -29,7 +29,8 @@ from alex import kg  # noqa: E402
 from alex.audit import ADDITIONS, rescore  # noqa: E402
 from alex.diagnose import RULES  # noqa: E402
 from alex.prompts import CASES, FAIR_PAIRS, SUITE_HASH, VARIANTS  # noqa: E402
-from alex.stats import HYPOTHESES, analyze, fairness  # noqa: E402
+from alex.llm import PRICES  # noqa: E402
+from alex.stats import HYPOTHESES, analyze, bootstrap_ci, fairness  # noqa: E402
 from alex.tools import SCHEMAS, WRITE_TOOLS  # noqa: E402
 
 TEMPLATE = ROOT / "report" / "reference" / "Final_Project_Report_Template.docx"
@@ -406,8 +407,10 @@ P("The question is concrete and repeated in every company that adopts an LLM. Pu
   "financial figures, obeying instructions hidden in a news feed, or treating identical companies differently "
   "depending on their country are real harms.", "Relevance. ")
 P("The study is feasible on a student budget: the questions are short, the data is frozen so no paid data feed is "
-  f"needed, and the complete ablation of {len(RUNS)} runs cost about US${TOTAL_COST:.2f} at API list prices (it was "
-  "run through a subscription-based command-line client).", "Feasibility. ")
+  f"needed, and the complete ablation of {len(RUNS)} runs corresponds to about US${TOTAL_COST:.2f} at API list "
+  "prices. The runs went through a subscription-based command-line client, so this figure is an estimate of what "
+  "the same tokens would cost on the pay-per-use API, not the amount charged to the subscription "
+  "(Section 7.1).", "Feasibility. ")
 T("Research questions", ["#", "Research question", "Answered in"],
   [["RQ1", "Does accuracy rise with model tier?", "7.2, 7.4"],
    ["RQ2", "Does the system prompt change accuracy or behaviour?", "7.3, 7.5"],
@@ -530,11 +533,18 @@ T("State-space formulation", ["Element", "Definition"],
    ["Transition", "add the tool call and its (deterministic) result to the state"],
    ["Goal state", "a final answer that passes every rule of the case"],
    ["Path cost", "number of turns, then tokens and money"]], widths=[3.4, 13.4])
-P("The number of possible actions is unbounded (free-text arguments), so blind search such as breadth-first or A* "
-  "over explicit states is impossible. The LLM acts as a learned heuristic that proposes the most promising next "
-  "action: greedy best-first search without backtracking [25], limited to eight turns. Because the shortest correct "
-  "path of every case is known (usually one round of tool calls, two for the supply-chain case), the number of "
-  "calls and turns shows how close each model's search is to optimal.", "Search strategy. ")
+P("The number of possible actions is unbounded (free-text arguments), so systematic search such as breadth-first "
+  "or A* over explicit states is impossible. The harness therefore implements no heuristic evaluation function, "
+  "no frontier (open list) and no backtracking. Instead, the state-space view is an abstraction of what happens: "
+  "at every turn the LLM reads the whole current state and generates exactly one next action — a set of tool "
+  "calls or the final answer. The \"heuristic\" is implicit in the model's learned next-token distribution; it is "
+  "not a numeric score that alex computes, compares or stores.", "Search strategy. ")
+P("This is best described as LLM-guided state-space search: one path is followed, it is never revised, and it "
+  "is cut off after eight turns. It resembles greedy best-first search [25] only in that one locally preferred "
+  "successor is expanded at a time and earlier choices are not reconsidered; it is not a conventional greedy "
+  "best-first implementation. Because the shortest correct path of every case is known (usually one round of "
+  "tool calls, two for the supply-chain case), the number of calls and turns shows how close each model's path "
+  "is to optimal.", "How the next action is chosen. ")
 H2("5.4 Knowledge representation")
 P("The project uses a semantic network [25], stored as a property graph: nodes are typed entities (company, "
   "industry, sector, country, macro series) and edges are typed relations with properties. Relations such as "
@@ -581,9 +591,16 @@ T("CSP formulation of run checking", ["Variable", "Domain", "Example constraint 
    ["Required facts", "present / absent in answer", "answer contains 52% and 27%"],
    ["Forbidden pattern", "present / absent", "no dollar figure for an invalid ticker"],
    ["Tool count", "0, 1, 2, …", "zero calls for the no-tool question"]], widths=[4.2, 5.0, 7.6])
-P("The score is the weighted share of satisfied constraints (tools 40%, arguments 30%, answer facts 30%) and "
-  "\"passed\" means all constraints hold. The LLM acts as the generator of an assignment and the scorer tests it; "
-  "backtracking is deliberately not used, because the study measures how well the model satisfies the "
+P("Three things are kept apart:")
+B("decide whether a run satisfies all requirements: a run is \"passed\" only if every constraint holds. This "
+  "binary pass/fail is the CSP proper.", "The CSP constraints ")
+B("measures partial constraint satisfaction (tools 40%, arguments 30%, answer facts 30%). It is a scoring "
+  "function on top of the CSP, used to rank runs that fail, not a CSP solving strategy.", "The weighted score ")
+B("is the deterministic rule-based program that checks the LLM-generated tool calls and answer against the "
+  "constraints. It is a consistency check of one complete assignment.", "The rule scorer ")
+P("No CSP solver (backtracking, forward checking or arc consistency) is used, because the study does not search "
+  "for a satisfying assignment: the LLM proposes one complete assignment (its tool calls and answer) and the "
+  "scorer only verifies it. This is deliberate, since the study measures how well the model satisfies the "
   "constraints on its own. (The guidelines allow CSP or fuzzy logic; this project uses CSP.)", "Strategy. ")
 H2("5.7 Other AI techniques")
 H3("Transformer language models")
@@ -619,7 +636,9 @@ T("Pre-registered hypotheses", ["#", "Hypothesis", "Test"],
   widths=[1.2, 9.4, 6.2])
 P("Configurations are compared on the same cases, so tests are paired (exact sign-flip and McNemar tests, "
   "α = 0.05); mean scores get 95% bootstrap confidence intervals [27]. pass^k [10] is the probability that all k repeats of "
-  "a case pass. A verdict is \"ceiling\" when every configuration already scores 1.0, so a difference cannot appear.")
+  "a case pass. H6 is evaluated on the default prompt only, because that is the condition run three times; the "
+  "minimal and grounded prompts were run once and give no repeats. A verdict is \"ceiling\" when every "
+  "configuration already scores 1.0, so a difference cannot appear.")
 H2("5.9 Originality")
 B("a controlled tier × prompt ablation within one model family, so differences are not mixed with vendor effects;")
 B("a financial knowledge graph as a tool, identical in memory and in Neo4j, for repeatable multi-hop reasoning;")
@@ -651,7 +670,7 @@ T("Technology stack", ["Layer", "Technology", "Purpose"],
    ["Data (live mode)", "yfinance, FRED, SEC EDGAR, Finnhub", "real market data"],
    ["Analysis", "pandas, NumPy", "risk metrics, correlations"],
    ["Configuration", "pydantic-settings", "keys and settings from .env"],
-   ["Testing", "pytest, ruff, GitHub Actions", "62 tests, linting, CI with Neo4j"],
+   ["Testing", "pytest, ruff, GitHub Actions", "74 tests, linting, CI with Neo4j"],
    ["Packaging", "uv, Docker, docker-compose", "reproducible environment"],
    ["Report", "python-docx, matplotlib", "this report and its figures"]], widths=[3.4, 7.4, 6.0])
 
@@ -670,7 +689,17 @@ T("Experimental setup", ["Item", "Value"],
    ["Total runs", str(len(RUNS))],
    ["Served through", "command-line client (Claude Code) on a subscription"],
    ["Reasoning effort", REP.get("effort", "medium")],
-   ["Cost at API list prices", f"US${TOTAL_COST:.2f}"]], widths=[5.0, 11.8])
+   ["Estimated cost at API list prices", f"US${TOTAL_COST:.2f} (not the amount charged)"]], widths=[5.0, 11.8])
+P("The runs were served through Claude Code on a subscription, which charges a flat fee rather than per token. "
+  "To make the tiers comparable, alex computes an API-list-price equivalent for every run from the token counts "
+  "that the client reports:", "How cost is estimated. ")
+P("cost = input tokens × input price + output tokens × output price,")
+P(f"summed over all turns of the run (prompt and tool results count as input; reasoning and answer as output). "
+  f"The list prices used, in US$ per million tokens (input / output), are: "
+  + "; ".join(f"{NAME[m]} {PRICES[m][0]:.2f} / {PRICES[m][1]:.2f}" for m in MODELS)
+  + f". Over all {len(RUNS)} runs this gives {sum(r['input_tokens'] for r in RUNS):,} input and "
+  f"{sum(r['output_tokens'] for r in RUNS):,} output tokens, i.e. US${TOTAL_COST:.2f}. The figure is used only "
+  "to compare tiers; it is not what the subscription actually cost, and cache discounts are ignored.")
 H2("7.2 Ablation results: accuracy, cost and speed")
 rows = []
 for m in MODELS:
@@ -683,9 +712,12 @@ for m in MODELS:
 T("Ablation results per configuration", ["Model", "Prompt", "Runs", "Score", "Score (audited)", "Pass rate",
                                           "Cost (¢/case)", "Median time (s)"],
   rows, widths=[2.4, 2.2, 1.4, 1.6, 2.0, 1.8, 2.2, 2.4], numeric_from=2)
-P(f"Every configuration answered correctly. The only scores below 1.000 are the three Opus runs on the default "
-  "prompt, which the audit (Section 7.8) shows were correct answers rejected by the scorer. Cost and speed, "
-  "however, differ strongly between tiers.")
+P(f"Under the original, pre-registered scorer (column \"Score\"), eight of the nine configurations scored 1.000; "
+  f"{NAME[O_]} on the default prompt scored {SUMM[O_ + '@default']['score']:.3f} with a "
+  f"{SUMM[O_ + '@default']['pass_rate']:.0%} pass rate, because three of its runs failed. Only after the post-hoc "
+  "audit (column \"Score (audited)\", Section 7.8), which found those three answers to be correct but differently "
+  "worded, does every configuration reach 1.000. Cost and speed, however, differ strongly between tiers under "
+  "both scorings.")
 H2("7.3 Ablation results: behaviour")
 rows = []
 for m in MODELS:
@@ -756,14 +788,51 @@ H2("7.7 Hypothesis verdicts")
 T("Verdicts of the pre-registered hypotheses", ["#", "Hypothesis", "Pre-registered scoring", "Audited scoring"],
   [[h, HYPOTHESES[h].split(" (")[0].split(":")[0].rstrip("."), HYP[h]["verdict"], HYP_A.get(h, {}).get("verdict", "-")]
    for h in HYP], widths=[1.2, 7.6, 4.0, 4.0])
-P("Two verdicts are firm and survive the audit: H2 (the cheapest tier is cost-efficient) is supported and H5 "
-  "(counterfactual fairness) is not supported. The remaining hypotheses end at the ceiling: this suite does not "
-  "separate the tiers on accuracy, prompt sensitivity, safety or reliability.")
+P("The pre-registered column is the primary result. The audited column is a post-hoc sensitivity analysis "
+  "(Section 7.8) and is reported only to show which verdicts depend on the three disputed runs. Two verdicts are "
+  "the same under both scorings: H2 (the cheapest tier is cost-efficient) is supported and H5 (counterfactual "
+  "fairness) is not supported. H1, H3 and H6 are \"not supported\" under the pre-registered scoring and become "
+  "\"inconclusive (ceiling)\" after the audit; H4 is at the ceiling under both.")
+t1, t1a = HYP["H1"]["test"], HYP_A["H1"]["test"]
+T("Paired tests for H1 (Opus vs Haiku, default prompt, same 19 cases)",
+  ["Test", "Pre-registered", "Audited"],
+  [["Mean score difference (Opus − Haiku)", f"{t1['score']['mean_diff']:+.3f}", f"{t1a['score']['mean_diff']:+.3f}"],
+   ["Cases with a non-zero difference", str(t1["score"]["nonzero"]), str(t1a["score"]["nonzero"])],
+   ["Exact sign-flip test, p", f"{t1['score']['p']:.3f}", f"{t1a['score']['p']:.3f}"],
+   ["McNemar discordant pairs (Opus only / Haiku only)", f"{t1['pass']['a_only']} / {t1['pass']['b_only']}",
+    f"{t1a['pass']['a_only']} / {t1a['pass']['b_only']}"],
+   ["McNemar exact test, p", f"{t1['pass']['p']:.3f}", f"{t1a['pass']['p']:.3f}"]], widths=[8.8, 4.0, 4.0])
+P("With at most one discordant case the smallest attainable p-value is 1.0, so neither test can reject the null "
+  "hypothesis at α = 0.05. This is a ceiling effect, not evidence that the tiers are equal: when almost every case "
+  "is solved by both models there are no differences for a paired test to detect.")
+ci_rows = []
+for m in MODELS:
+    for v in VARS:
+        k = f"{m}@{v}"
+        if k in SUMM:
+            xs = [r["score"] for r in keyrun(k)]
+            lo, hi = bootstrap_ci(xs)
+            ci_rows.append([NAME[m], v, len(xs), f"{statistics.fmean(xs):.3f}", f"[{lo:.3f}, {hi:.3f}]"])
+T("Mean score with 95% bootstrap confidence interval (pre-registered scoring)",
+  ["Model", "Prompt", "Runs", "Mean score", "95% CI"], ci_rows, widths=[3.0, 2.8, 2.0, 3.0, 4.6], numeric_from=2)
+P("Every configuration except Opus on the default prompt has the degenerate interval [1.000, 1.000]: when all "
+  "runs score 1.0, resampling cannot produce any other mean. The intervals therefore do not separate the tiers; "
+  "they show only that the Opus default result is the single configuration with any uncertainty.")
+T("Reliability for H6 (default prompt, three repeats per case)", ["Model", "pass^1", "pass^3 (pre-reg.)",
+                                                                  "pass^3 (audited)"],
+  [[NAME[m], f"{HYP['H6']['reliability'][m + '@default']['pass^1']:.3f}",
+    f"{HYP['H6']['reliability'][m + '@default']['pass^3']:.3f}",
+    f"{HYP_A['H6']['reliability'][m + '@default']['pass^3']:.3f}"] for m in MODELS],
+  widths=[4.0, 3.6, 4.4, 4.4], numeric_from=1)
+P("pass^3 never fell below pass^1: every case that passed once passed all three times, including the Opus case "
+  "that failed all three times under the pre-registered scorer. H6 is therefore not supported under the "
+  "pre-registered scoring and inconclusive (ceiling) after the audit.")
 H2("7.8 Audit of the scorer")
 if CHANGED:
     P("Every failed run was read by hand. The three Opus failures were correct definitions of the Sharpe ratio "
       "that did not use the expected words. The missed phrasings were added for that fact only and the stored "
-      "answers re-scored, without calling any model again. The pre-registered scores remain the primary result.")
+      "answers re-scored, without calling any model again. This audit is post hoc: it was designed after the "
+      "results were seen, so it is a sensitivity analysis and the pre-registered scores remain the primary result.")
     T("Runs whose result changes in the audit", ["Model", "Prompt", "Case", "Score before", "Score after"],
       [[NAME[c["key"].split("@")[0]], c["key"].split("@")[1], c["case"], f"{c['before']:.2f}", f"{c['after']:.2f}"]
        for c in CHANGED], widths=[3.2, 2.8, 3.0, 3.6, 3.6], numeric_from=3)
@@ -774,7 +843,7 @@ if CHANGED:
 H2("7.9 Validation of the harness")
 attempts = sum(1 for r in RUNS if (r.get("attempts") or 1) > 1)
 T("Checks on the benchmark itself", ["Check", "Result"],
-  [["Automated tests (scoring, tools, graph, statistics, providers)", "62 tests pass"],
+  [["Automated tests (scoring, tools, graph, statistics, providers)", "74 tests pass"],
    ["Every case solvable from the frozen tools (oracle test)", "passes"],
    ["Knowledge graph: Neo4j vs in-memory answers", "identical (parity test, also in CI)"],
    ["Served model equals requested model", f"all {len(RUNS)} runs"],
@@ -795,17 +864,21 @@ T("Team responsibility matrix", ["Activity", *names],
 
 # ================================================================ Conclusions ====
 H1("Conclusions")
-P(f"The ablation ran {len(SUMM)} configurations of model tier and system prompt over {len(RUNS)} runs and answers "
-  "its research questions clearly:")
-B(f"every configuration reached an audited score of {min(a['score'] for a in AUD['summary'].values()):.3f}: on these "
-  "financial tool-use, knowledge-graph and safety tasks, a larger model or a longer prompt did not improve "
-  "accuracy (RQ1, RQ2);", "Accuracy saturates — ")
+P(f"The ablation ran {len(SUMM)} configurations of model tier and system prompt over {len(RUNS)} runs. The "
+  "conclusions below rest on the pre-registered analysis; where the post-hoc audit changes a number, both are "
+  "given.")
+B(f"under the pre-registered scorer eight of nine configurations scored 1.000 and {NAME[O_]} on the default prompt "
+  f"{SUMM[O_ + '@default']['score']:.3f}, so a larger model did not score higher (H1 not supported); after the "
+  "post-hoc audit all nine score 1.000. On these financial tool-use, knowledge-graph and safety tasks, a larger "
+  "model or a longer prompt did not improve accuracy (RQ1, RQ2);", "Accuracy saturates — ")
 B(f"{NAME[O_]} cost {x_cost(O_, H_):.0f}× and {NAME[S_]} {x_cost(S_, H_):.0f}× as much as {NAME[H_]}, and {NAME[O_]} was "
   f"{TIER[O_]['lat'] / TIER[H_]['lat']:.1f}× slower; {NAME[H_]} is the cost-efficient choice (RQ3, H2 supported);",
   "so cost decides — ")
 B("only Haiku rated two identical companies differently, and only Haiku and Sonnet warned users about manipulated "
   "data (RQ4, H5 not supported);", "but behaviour differs — ")
-B("the only failures were scorer artefacts, found by the expert system and a human audit.", "and evaluation needs care — ")
+B("the only failures under the pre-registered scorer were judged by a post-hoc human audit to be correctly "
+  "worded differently; the audit is reported as a sensitivity analysis, not as a replacement result.",
+  "and evaluation needs care — ")
 P("For practitioners, the general lesson is that model size should be matched to the task rather than maximised: "
   "for tool-grounded retrieval and analysis the smallest tier of a family can be as accurate as the largest at a "
   "small fraction of the cost, while tasks that require consistent judgement (rating or labelling entities) may "
